@@ -9,13 +9,22 @@ namespace Naos.WinRM.Core
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Linq;
+    using System.Management.Automation;
+    using System.Management.Automation.Runspaces;
     using System.Security;
 
     using Naos.WinRM.Contract;
 
+    using ScriptBlock = Naos.WinRM.Contract.ScriptBlock;
+
     /// <inheritdoc />
     public class MachineManager : IManageMachines
     {
+        private const long FileChunkSizeThresholdByteCount = 150000;
+
+        private const long FileChunkSizePerSend = 100000;
+
         private readonly string privateIpAddress;
 
         private readonly string username;
@@ -77,13 +86,64 @@ namespace Naos.WinRM.Core
         public void Reboot(bool force = true)
         {
             var forceAddIn = force ? " -Force" : string.Empty;
-            this.RunRemoteScriptBlock("{ Restart-Computer" + forceAddIn + " }");
+            var restartScriptBlock = new ScriptBlock() { ScriptText = "{ Restart-Computer" + forceAddIn + " }" };
+            this.RunScript(restartScriptBlock);
         }
 
         /// <inheritdoc />
-        public void SendFile(string filePathOnTargetMachine, byte[] fileContents)
+        public void SendFile(string filePathOnTargetMachine, byte[] fileContents, bool appended = false)
         {
-            var sendFileScriptBlock = @"
+            using (var runspace = RunspaceFactory.CreateRunspace())
+            {
+                runspace.Open();
+
+                var sessionObject = this.BeginSession(runspace);
+
+                if (fileContents.Length <= FileChunkSizeThresholdByteCount)
+                {
+                    SendFileSessioned(filePathOnTargetMachine, fileContents, appended, runspace, sessionObject);
+                }
+                else
+                {
+                    // deconstruct and send pieces as appended...
+                    var nibble = new List<byte>();
+                    foreach (byte currentByte in fileContents)
+                    {
+                        if (nibble.Count < FileChunkSizePerSend)
+                        {
+                            nibble.Add(currentByte);
+                        }
+                        else
+                        {
+                            SendFileSessioned(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
+                            nibble.Clear();
+                        }
+                    }
+
+                    // flush the "buffer"...
+                    if (nibble.Any())
+                    {
+                        SendFileSessioned(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
+                    }
+                }
+
+                EndSession(sessionObject, runspace);
+
+                runspace.Close();
+            }
+        }
+
+        private static void SendFileSessioned(
+            string filePathOnTargetMachine,
+            byte[] fileContents,
+            bool appended,
+            Runspace runspace,
+            object sessionObject)
+        {
+            var commandName = appended ? "Add-Content" : "Set-Content";
+            var sendFileScriptBlock = new ScriptBlock() 
+            { 
+                ScriptText = @"
 	                { 
 		                param($filePath, $fileContents)
 
@@ -93,21 +153,113 @@ namespace Naos.WinRM.Core
 			                md $parentDir | Out-Null
 		                }
 
-		                Set-Content -Path $filePath -Encoding Byte -Value $fileContents
-	                }";
+		                " + commandName + @" -Path $filePath -Encoding Byte -Value $fileContents
+	                }" 
+            };
 
             var arguments = new object[] { filePathOnTargetMachine, fileContents };
-            var results = this.RunRemoteScriptBlock(sendFileScriptBlock, arguments);
 
-            var hasresults = results == string.Empty;
+            var notUsedResults = RunScriptSessioned(sendFileScriptBlock, arguments, runspace, sessionObject);
         }
 
-        private string RunRemoteScriptBlock(string scriptBlockText, ICollection<object> arguments = null)
+        /// <inheritdoc />
+        public ICollection<object> RunScript(ScriptBlock scriptBlock, ICollection<object> scriptBlockParameters = null)
         {
-            var remoteCommand = new ScriptBlock() { ScriptText = scriptBlockText };
+            List<object> ret = null;
+
+            using (var runspace = RunspaceFactory.CreateRunspace())
+            {
+                runspace.Open();
+
+                var sessionObject = this.BeginSession(runspace);
+
+                ret = RunScriptSessioned(scriptBlock, scriptBlockParameters, runspace, sessionObject);
+
+                EndSession(sessionObject, runspace);
+
+                runspace.Close();
+            }
+
+            return ret;
+        }
+
+        private static void EndSession(object sessionObject, Runspace runspace)
+        {
+            var removeSessionCommand = new Command("Remove-PSSession");
+            removeSessionCommand.Parameters.Add("Session", sessionObject);
+            var unneededOutput = RunCommand(runspace, removeSessionCommand);
+        }
+
+        private object BeginSession(Runspace runspace)
+        {
             var credentials = new Credentials() { Username = this.username, Password = this.password };
-            var results = remoteCommand.Execute(this.privateIpAddress, credentials, arguments);
-            return results;
+            var powershellCredentials = new PSCredential(credentials.Username, credentials.Password);
+
+            var sessionOptionsCommand = new Command("New-PSSessionOption");
+            sessionOptionsCommand.Parameters.Add("OperationTimeout", 0);
+            sessionOptionsCommand.Parameters.Add("IdleTimeout", TimeSpan.FromMinutes(20).TotalMilliseconds);
+            var sessionOptionsObject = RunCommand(runspace, sessionOptionsCommand).Single().BaseObject;
+
+            var sessionCommand = new Command("New-PSSession");
+            sessionCommand.Parameters.Add("ComputerName", this.privateIpAddress);
+            sessionCommand.Parameters.Add("Credential", powershellCredentials);
+            sessionCommand.Parameters.Add("SessionOption", sessionOptionsObject);
+            var sessionObject = RunCommand(runspace, sessionCommand).Single().BaseObject;
+            return sessionObject;
+        }
+
+        private static List<object> RunScriptSessioned(
+            ScriptBlock scriptBlock,
+            ICollection<object> scriptBlockParameters,
+            Runspace runspace,
+            object sessionObject)
+        {
+            using (var powershell = PowerShell.Create())
+            {
+                powershell.Runspace = runspace;
+                var variableNameArgs = "scriptBlockArgs";
+                var variableNameSession = "invokeCommandSession";
+
+                powershell.Runspace.SessionStateProxy.SetVariable(variableNameSession, sessionObject);
+
+                var argsAddIn = string.Empty;
+                if (scriptBlockParameters != null && scriptBlockParameters.Count > 0)
+                {
+                    powershell.Runspace.SessionStateProxy.SetVariable(variableNameArgs, scriptBlockParameters.ToArray());
+                    argsAddIn = " -ArgumentList $" + variableNameArgs;
+                }
+
+                var fullScript = "$sc = " + scriptBlock.ScriptText + Environment.NewLine + "Invoke-Command -Session $"
+                                 + variableNameSession + argsAddIn + " -ScriptBlock $sc";
+                powershell.AddScript(fullScript);
+
+                var output = powershell.Invoke();
+
+                if (powershell.Streams.Error.Count > 0)
+                {
+                    var errorString = powershell.Streams.Error.Select(_ => _ + Environment.NewLine);
+                    throw new RemoteExecutionException(
+                        "Failed to run script (" + scriptBlock.ScriptText + ") got back: " + errorString);
+                }
+
+                var ret = output.Select(_ => _.BaseObject).ToList();
+                return ret;
+            }
+        }
+
+        private static List<PSObject> RunCommand(Runspace runspace, Command arbitraryCommand)
+        {
+            using (var powershell = PowerShell.Create())
+            {
+                powershell.Runspace = runspace;
+
+                powershell.Commands.AddCommand(arbitraryCommand);
+
+                var output = powershell.Invoke();
+
+                var ret = output.ToList();
+                return ret;
+            }
         }
     }
 }
