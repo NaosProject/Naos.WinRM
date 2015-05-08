@@ -42,6 +42,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Credentials.cs" />
+    <Compile Include="IManageMachines.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RemoteExecutionException.cs" />
     <Compile Include="ScriptBlock.cs" />

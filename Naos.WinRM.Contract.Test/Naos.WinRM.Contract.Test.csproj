@@ -56,6 +56,12 @@
     <None Include="packages.config" />
     <None Include="Settings.StyleCop" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Naos.WinRM.Contract\Naos.WinRM.Contract.csproj">
+      <Project>{3734B786-348C-4FF5-9321-B2E3929B9C30}</Project>
+      <Name>Naos.WinRM.Contract</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>

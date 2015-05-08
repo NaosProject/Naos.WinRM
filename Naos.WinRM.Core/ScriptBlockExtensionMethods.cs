@@ -12,13 +12,13 @@ namespace Naos.WinRM.Core
     using System.Linq;
     using System.Management.Automation;
     using System.Management.Automation.Runspaces;
+    using System.Runtime.CompilerServices;
     using System.Text;
 
     using Naos.WinRM.Contract;
 
     using NaosCredentials = Naos.WinRM.Contract.Credentials;
     using NaosScriptBlock = Naos.WinRM.Contract.ScriptBlock;
-    using ScriptBlock = System.Management.Automation.ScriptBlock;
 
     /// <summary>
     /// Methods added onto the RemoteCommand object.
@@ -54,31 +54,31 @@ namespace Naos.WinRM.Core
                 sessionCommand.Parameters.Add("SessionOption", sessionOptionsObject);
                 var sessionObject = RunCommand(runspace, sessionCommand).Single().BaseObject;
 
-                var scriptBlockObject = ScriptBlock.Create(scriptBlock.ScriptText);
-                var remoteCommand = new Command("Invoke-Command");
-                remoteCommand.Parameters.Add("Session", sessionObject);
-                remoteCommand.Parameters.Add("ScriptBlock", scriptBlockObject);
-                if (arguments != null && arguments.Count > 0)
-                {
-                    remoteCommand.Parameters.Add("ArgumentList", arguments.ToArray());
-                }
-
                 using (var powershell = PowerShell.Create())
                 {
                     powershell.Runspace = runspace;
+                    var variableNameArgs = "scriptBlockArgs";
+                    var variableNameSession = "invokeCommandSession";
 
-                    powershell.Runspace.SessionStateProxy.SetVariable("sess", sessionObject);
-                    var fullScript = "Invoke-Command -Session $sess -ScriptBlock " + scriptBlock.ScriptText
-                                     + ((arguments != null && arguments.Count > 0)
-                                            ? " -ArgumentList @(" + string.Join(",", arguments) + ")"
-                                            : string.Empty);
+                    powershell.Runspace.SessionStateProxy.SetVariable(variableNameSession, sessionObject);
+
+                    var argsAddIn = string.Empty;
+                    if (arguments != null && arguments.Count > 0)
+                    {
+                        powershell.Runspace.SessionStateProxy.SetVariable(variableNameArgs, arguments.ToArray());
+                        argsAddIn = " -ArgumentList $" + variableNameArgs;
+                    }
+
+                    var fullScript = "$sc = " + scriptBlock.ScriptText + Environment.NewLine
+                                     + "Invoke-Command -Session $" + variableNameSession + argsAddIn
+                                     + " -ScriptBlock $sc";                    
                     powershell.AddScript(fullScript);
 
                     var output = powershell.Invoke();
 
                     if (powershell.Streams.Error.Count > 0)
                     {
-                        var errorString = powershell.Streams.Error.Select(_ => _.ErrorDetails + Environment.NewLine);
+                        var errorString = powershell.Streams.Error.Select(_ => _ + Environment.NewLine);
                         throw new RemoteExecutionException(
                             "Failed to run script (" + scriptBlock.ScriptText + ") got back: " + errorString);
                     }

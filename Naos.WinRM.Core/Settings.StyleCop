@@ -8,6 +8,7 @@
       <Value>nullable</Value>
       <Value>pluralization</Value>
       <Value>json</Value>
+      <Value>ip</Value>
     </CollectionProperty>
     <CollectionProperty Name="DeprecatedWords">
       <Value>preprocessor,pre-processor</Value>
