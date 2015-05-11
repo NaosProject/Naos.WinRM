@@ -14,14 +14,14 @@ namespace Naos.WinRM.Test
 
     public class MachineManagerTest
     {
-        [Fact]
-        public static void TestLargeFileCopy()
+        // [Fact]
+        public static void Examples()
         {
             // this was used for debugging but provides an example case.
             var machineManager = new MachineManager(
-                "10.23.1.227",
+                "10.0.0.1",
                 "Administrator",
-                MachineManager.ConvertStringToSecureString("(8knsKYWFf"));
+                MachineManager.ConvertStringToSecureString("password"));
 
             var fileObjects = machineManager.RunScript("{ param($path) ls $path }", new[] { @"D:\Temp" });
         }

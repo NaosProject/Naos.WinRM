@@ -54,7 +54,7 @@ namespace Naos.WinRM
         /// <param name="scriptBlock">Script block.</param>
         /// <param name="scriptBlockParameters">Parameters to be passed to the script block.</param>
         /// <returns>Collection of objects that were the output from the script block.</returns>
-        ICollection<object> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters);
+        ICollection<dynamic> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters);
     }
 
     /// <inheritdoc />
@@ -199,7 +199,7 @@ namespace Naos.WinRM
         }
 
         /// <inheritdoc />
-        public ICollection<object> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters = null)
+        public ICollection<dynamic> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters = null)
         {
             List<object> ret = null;
 
@@ -243,7 +243,7 @@ namespace Naos.WinRM
             return sessionObject;
         }
 
-        private List<object> RunScriptSessioned(
+        private List<dynamic> RunScriptSessioned(
             string scriptBlock,
             ICollection<object> scriptBlockParameters,
             Runspace runspace,
@@ -272,7 +272,7 @@ namespace Naos.WinRM
 
                 this.ThrowOnError(powershell, scriptBlock);
 
-                var ret = output.Select(_ => _.BaseObject).ToList();
+                var ret = output.Cast<dynamic>().ToList();
                 return ret;
             }
         }
