@@ -1,10 +1,10 @@
 ﻿// --------------------------------------------------------------------------------------------------------------------
-// <copyright file="MachineManager.cs" company="Naos">
+// <copyright file="Naos.WinRM.cs" company="Naos">
 //   Copyright 2015 Naos
 // </copyright>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace Naos.WinRM.Core
+namespace Naos.WinRM
 {
     using System;
     using System.Collections.Generic;
@@ -14,9 +14,48 @@ namespace Naos.WinRM.Core
     using System.Management.Automation.Runspaces;
     using System.Security;
 
-    using Naos.WinRM.Contract;
+    /// <summary>
+    /// Custom exception for when things go wrong running remote commands.
+    /// </summary>
+    public class RemoteExecutionException : Exception
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RemoteExecutionException"/> class.
+        /// </summary>
+        /// <param name="message">Exception message.</param>
+        public RemoteExecutionException(string message)
+            : base(message)
+        {
+        }
+    }
 
-    using ScriptBlock = Naos.WinRM.Contract.ScriptBlock;
+    /// <summary>
+    /// Manages various remote tasks on a machine using the WinRM protocol.
+    /// </summary>
+    public interface IManageMachines
+    {
+        /// <summary>
+        /// Executes a user initiated reboot.
+        /// </summary>
+        /// <param name="force">Can override default behavior of a forceful reboot (kick users off).</param>
+        void Reboot(bool force = true);
+
+        /// <summary>
+        /// Sends a file to the remote machine at the provided file path on that target computer.
+        /// </summary>
+        /// <param name="filePathOnTargetMachine">File path to write the contents to on the remote machine.</param>
+        /// <param name="fileContents">Payload to write to the file.</param>
+        /// <param name="appended">Optionally writes the bytes in appended mode or not (default is NOT).</param>
+        void SendFile(string filePathOnTargetMachine, byte[] fileContents, bool appended = false);
+
+        /// <summary>
+        /// Runs an arbitrary script block.
+        /// </summary>
+        /// <param name="scriptBlock">Script block.</param>
+        /// <param name="scriptBlockParameters">Parameters to be passed to the script block.</param>
+        /// <returns>Collection of objects that were the output from the script block.</returns>
+        ICollection<object> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters);
+    }
 
     /// <inheritdoc />
     public class MachineManager : IManageMachines
@@ -86,7 +125,7 @@ namespace Naos.WinRM.Core
         public void Reboot(bool force = true)
         {
             var forceAddIn = force ? " -Force" : string.Empty;
-            var restartScriptBlock = new ScriptBlock() { ScriptText = "{ Restart-Computer" + forceAddIn + " }" };
+            var restartScriptBlock = "{ Restart-Computer" + forceAddIn + " }";
             this.RunScript(restartScriptBlock);
         }
 
@@ -101,7 +140,7 @@ namespace Naos.WinRM.Core
 
                 if (fileContents.Length <= FileChunkSizeThresholdByteCount)
                 {
-                    SendFileSessioned(filePathOnTargetMachine, fileContents, appended, runspace, sessionObject);
+                    this.SendFileSessioned(filePathOnTargetMachine, fileContents, appended, runspace, sessionObject);
                 }
                 else
                 {
@@ -115,7 +154,7 @@ namespace Naos.WinRM.Core
                         }
                         else
                         {
-                            SendFileSessioned(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
+                            this.SendFileSessioned(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
                             nibble.Clear();
                         }
                     }
@@ -123,17 +162,17 @@ namespace Naos.WinRM.Core
                     // flush the "buffer"...
                     if (nibble.Any())
                     {
-                        SendFileSessioned(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
+                        this.SendFileSessioned(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
                     }
                 }
 
-                EndSession(sessionObject, runspace);
+                this.EndSession(sessionObject, runspace);
 
                 runspace.Close();
             }
         }
 
-        private static void SendFileSessioned(
+        private void SendFileSessioned(
             string filePathOnTargetMachine,
             byte[] fileContents,
             bool appended,
@@ -141,9 +180,7 @@ namespace Naos.WinRM.Core
             object sessionObject)
         {
             var commandName = appended ? "Add-Content" : "Set-Content";
-            var sendFileScriptBlock = new ScriptBlock() 
-            { 
-                ScriptText = @"
+            var sendFileScriptBlock = @"
 	                { 
 		                param($filePath, $fileContents)
 
@@ -154,16 +191,15 @@ namespace Naos.WinRM.Core
 		                }
 
 		                " + commandName + @" -Path $filePath -Encoding Byte -Value $fileContents
-	                }" 
-            };
+	                }";
 
             var arguments = new object[] { filePathOnTargetMachine, fileContents };
 
-            var notUsedResults = RunScriptSessioned(sendFileScriptBlock, arguments, runspace, sessionObject);
+            var notUsedResults = this.RunScriptSessioned(sendFileScriptBlock, arguments, runspace, sessionObject);
         }
 
         /// <inheritdoc />
-        public ICollection<object> RunScript(ScriptBlock scriptBlock, ICollection<object> scriptBlockParameters = null)
+        public ICollection<object> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters = null)
         {
             List<object> ret = null;
 
@@ -173,9 +209,9 @@ namespace Naos.WinRM.Core
 
                 var sessionObject = this.BeginSession(runspace);
 
-                ret = RunScriptSessioned(scriptBlock, scriptBlockParameters, runspace, sessionObject);
+                ret = this.RunScriptSessioned(scriptBlock, scriptBlockParameters, runspace, sessionObject);
 
-                EndSession(sessionObject, runspace);
+                this.EndSession(sessionObject, runspace);
 
                 runspace.Close();
             }
@@ -183,33 +219,32 @@ namespace Naos.WinRM.Core
             return ret;
         }
 
-        private static void EndSession(object sessionObject, Runspace runspace)
+        private void EndSession(object sessionObject, Runspace runspace)
         {
             var removeSessionCommand = new Command("Remove-PSSession");
             removeSessionCommand.Parameters.Add("Session", sessionObject);
-            var unneededOutput = RunCommand(runspace, removeSessionCommand);
+            var unneededOutput = this.RunCommand(runspace, removeSessionCommand);
         }
 
         private object BeginSession(Runspace runspace)
         {
-            var credentials = new Credentials() { Username = this.username, Password = this.password };
-            var powershellCredentials = new PSCredential(credentials.Username, credentials.Password);
+            var powershellCredentials = new PSCredential(this.username, this.password);
 
             var sessionOptionsCommand = new Command("New-PSSessionOption");
             sessionOptionsCommand.Parameters.Add("OperationTimeout", 0);
             sessionOptionsCommand.Parameters.Add("IdleTimeout", TimeSpan.FromMinutes(20).TotalMilliseconds);
-            var sessionOptionsObject = RunCommand(runspace, sessionOptionsCommand).Single().BaseObject;
+            var sessionOptionsObject = this.RunCommand(runspace, sessionOptionsCommand).Single().BaseObject;
 
             var sessionCommand = new Command("New-PSSession");
             sessionCommand.Parameters.Add("ComputerName", this.privateIpAddress);
             sessionCommand.Parameters.Add("Credential", powershellCredentials);
             sessionCommand.Parameters.Add("SessionOption", sessionOptionsObject);
-            var sessionObject = RunCommand(runspace, sessionCommand).Single().BaseObject;
+            var sessionObject = this.RunCommand(runspace, sessionCommand).Single().BaseObject;
             return sessionObject;
         }
 
-        private static List<object> RunScriptSessioned(
-            ScriptBlock scriptBlock,
+        private List<object> RunScriptSessioned(
+            string scriptBlock,
             ICollection<object> scriptBlockParameters,
             Runspace runspace,
             object sessionObject)
@@ -229,25 +264,20 @@ namespace Naos.WinRM.Core
                     argsAddIn = " -ArgumentList $" + variableNameArgs;
                 }
 
-                var fullScript = "$sc = " + scriptBlock.ScriptText + Environment.NewLine + "Invoke-Command -Session $"
+                var fullScript = "$sc = " + scriptBlock + Environment.NewLine + "Invoke-Command -Session $"
                                  + variableNameSession + argsAddIn + " -ScriptBlock $sc";
                 powershell.AddScript(fullScript);
 
                 var output = powershell.Invoke();
 
-                if (powershell.Streams.Error.Count > 0)
-                {
-                    var errorString = powershell.Streams.Error.Select(_ => _ + Environment.NewLine);
-                    throw new RemoteExecutionException(
-                        "Failed to run script (" + scriptBlock.ScriptText + ") got back: " + errorString);
-                }
+                this.ThrowOnError(powershell, scriptBlock);
 
                 var ret = output.Select(_ => _.BaseObject).ToList();
                 return ret;
             }
         }
 
-        private static List<PSObject> RunCommand(Runspace runspace, Command arbitraryCommand)
+        private List<PSObject> RunCommand(Runspace runspace, Command arbitraryCommand)
         {
             using (var powershell = PowerShell.Create())
             {
@@ -257,8 +287,21 @@ namespace Naos.WinRM.Core
 
                 var output = powershell.Invoke();
 
+                this.ThrowOnError(powershell, arbitraryCommand.CommandText);
+
                 var ret = output.ToList();
                 return ret;
+            }
+        }
+
+        private void ThrowOnError(PowerShell powershell, string attemptedScriptBlock)
+        {
+            if (powershell.Streams.Error.Count > 0)
+            {
+                var errorString = powershell.Streams.Error.Select(_ => _.ErrorDetails.Message + Environment.NewLine);
+                throw new RemoteExecutionException(
+                    "Failed to run script (" + attemptedScriptBlock + ") on " + this.privateIpAddress + " got errors: "
+                    + errorString);
             }
         }
     }
