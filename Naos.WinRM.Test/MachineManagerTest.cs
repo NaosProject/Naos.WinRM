@@ -4,7 +4,7 @@
 // </copyright>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace Naos.WinRM.Core.Test
+namespace Naos.WinRM.Test
 {
     using System;
     using System.Diagnostics;
@@ -15,22 +15,15 @@ namespace Naos.WinRM.Core.Test
     public class MachineManagerTest
     {
         // [Fact]
-        public static void TestLargeFileCopy()
+        public static void Examples()
         {
+            // this was used for debugging but provides an example case.
             var machineManager = new MachineManager(
                 "10.0.0.1",
                 "Administrator",
-                MachineManager.ConvertStringToSecureString("xxx"));
+                MachineManager.ConvertStringToSecureString("password"));
 
-            var localFilePath = @"D:\Temp\BigFileLocal.nupkg";
-            var fileBytes = File.ReadAllBytes(localFilePath);
-            var remoteFilePath = @"D:\Temp\BigFileRemote.nupkg";
-
-            var timer = new Stopwatch();
-            timer.Start();
-            machineManager.SendFile(remoteFilePath, fileBytes);
-            timer.Stop();
-            Console.WriteLine(timer.Elapsed);
+            var fileObjects = machineManager.RunScript("{ param($path) ls $path }", new[] { @"D:\Temp" });
         }
     }
 }

@@ -2,13 +2,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.31101.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Naos.WinRM.Contract", "Naos.WinRM.Contract\Naos.WinRM.Contract.csproj", "{3734B786-348C-4FF5-9321-B2E3929B9C30}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Naos.WinRM", "Naos.WinRM\Naos.WinRM.csproj", "{6C12BDA4-0C3F-4314-9DCA-E0BA272F65CC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Naos.WinRM.Contract.Test", "Naos.WinRM.Contract.Test\Naos.WinRM.Contract.Test.csproj", "{7527EC47-C637-49FF-BBBD-0F69DA1E8C43}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Naos.WinRM.Core", "Naos.WinRM.Core\Naos.WinRM.Core.csproj", "{6C12BDA4-0C3F-4314-9DCA-E0BA272F65CC}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Naos.WinRM.Core.Test", "Naos.WinRM.Core.Test\Naos.WinRM.Core.Test.csproj", "{492A4C30-55D2-438C-9384-B3E3E4BF5BB0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Naos.WinRM.Test", "Naos.WinRM.Test\Naos.WinRM.Test.csproj", "{492A4C30-55D2-438C-9384-B3E3E4BF5BB0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -16,14 +12,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{3734B786-348C-4FF5-9321-B2E3929B9C30}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3734B786-348C-4FF5-9321-B2E3929B9C30}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3734B786-348C-4FF5-9321-B2E3929B9C30}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3734B786-348C-4FF5-9321-B2E3929B9C30}.Release|Any CPU.Build.0 = Release|Any CPU
-		{7527EC47-C637-49FF-BBBD-0F69DA1E8C43}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{7527EC47-C637-49FF-BBBD-0F69DA1E8C43}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{7527EC47-C637-49FF-BBBD-0F69DA1E8C43}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{7527EC47-C637-49FF-BBBD-0F69DA1E8C43}.Release|Any CPU.Build.0 = Release|Any CPU
 		{6C12BDA4-0C3F-4314-9DCA-E0BA272F65CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{6C12BDA4-0C3F-4314-9DCA-E0BA272F65CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6C12BDA4-0C3F-4314-9DCA-E0BA272F65CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
