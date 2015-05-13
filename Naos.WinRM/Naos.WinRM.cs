@@ -70,17 +70,25 @@ namespace Naos.WinRM
 
         private readonly SecureString password;
 
+        private bool autoManageTrustedHosts;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="MachineManager"/> class.
         /// </summary>
         /// <param name="privateIpAddress">Private IP address of machine to interact with.</param>
         /// <param name="username">Username to use to connect.</param>
         /// <param name="password">Password to use to connect.</param>
-        public MachineManager(string privateIpAddress, string username, SecureString password)
+        /// <param name="autoManageTrustedHosts">Optionally specify whether to update the TrustedHost list prior to execution or assume it's handled elsewhere (default is FALSE).</param>
+        public MachineManager(
+            string privateIpAddress, 
+            string username, 
+            SecureString password, 
+            bool autoManageTrustedHosts = false)
         {
             this.privateIpAddress = privateIpAddress;
             this.username = username;
             this.password = password;
+            this.autoManageTrustedHosts = autoManageTrustedHosts;
         }
 
         /// <summary>
@@ -89,19 +97,16 @@ namespace Naos.WinRM
         /// <param name="ipAddress">IP Address to add to local trusted hosts.</param>
         public static void AddIpAddressToLocalTrusedHosts(string ipAddress)
         {
-            var command = "winrm s winrm/config/client \"@{TrustedHosts=`\"$IpAddress`\"}\"";
-            var info = new ProcessStartInfo("powershell.exe", "-command \"" + command + "\"") { CreateNoWindow = false };
-            var process = Process.Start(info);
-
-            while (!process.HasExited)
+            using (var runspace = RunspaceFactory.CreateRunspace())
             {
-                process.Refresh();
-            }
+                runspace.Open();
 
-            if (process.ExitCode != 0)
-            {
-                throw new ApplicationException(
-                    "Exit code should have been 0 running command (" + command + ") and was: " + process.ExitCode);
+                var command = new Command("Set-Item");
+                command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
+                command.Parameters.Add("Value", ipAddress);
+                command.Parameters.Add("Force", true);
+
+                var notUsedOutput = RunLocalCommand(runspace, command);
             }
         }
 
@@ -124,6 +129,8 @@ namespace Naos.WinRM
         /// <inheritdoc />
         public void Reboot(bool force = true)
         {
+            this.ManageTrustedHosts();
+
             var forceAddIn = force ? " -Force" : string.Empty;
             var restartScriptBlock = "{ Restart-Computer" + forceAddIn + " }";
             this.RunScript(restartScriptBlock);
@@ -132,6 +139,8 @@ namespace Naos.WinRM
         /// <inheritdoc />
         public void SendFile(string filePathOnTargetMachine, byte[] fileContents, bool appended = false)
         {
+            this.ManageTrustedHosts();
+
             using (var runspace = RunspaceFactory.CreateRunspace())
             {
                 runspace.Open();
@@ -201,6 +210,8 @@ namespace Naos.WinRM
         /// <inheritdoc />
         public ICollection<dynamic> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters = null)
         {
+            this.ManageTrustedHosts();
+
             List<object> ret = null;
 
             using (var runspace = RunspaceFactory.CreateRunspace())
@@ -223,7 +234,7 @@ namespace Naos.WinRM
         {
             var removeSessionCommand = new Command("Remove-PSSession");
             removeSessionCommand.Parameters.Add("Session", sessionObject);
-            var unneededOutput = this.RunCommand(runspace, removeSessionCommand);
+            var unneededOutput = RunLocalCommand(runspace, removeSessionCommand);
         }
 
         private object BeginSession(Runspace runspace)
@@ -233,13 +244,13 @@ namespace Naos.WinRM
             var sessionOptionsCommand = new Command("New-PSSessionOption");
             sessionOptionsCommand.Parameters.Add("OperationTimeout", 0);
             sessionOptionsCommand.Parameters.Add("IdleTimeout", TimeSpan.FromMinutes(20).TotalMilliseconds);
-            var sessionOptionsObject = this.RunCommand(runspace, sessionOptionsCommand).Single().BaseObject;
+            var sessionOptionsObject = RunLocalCommand(runspace, sessionOptionsCommand).Single().BaseObject;
 
             var sessionCommand = new Command("New-PSSession");
             sessionCommand.Parameters.Add("ComputerName", this.privateIpAddress);
             sessionCommand.Parameters.Add("Credential", powershellCredentials);
             sessionCommand.Parameters.Add("SessionOption", sessionOptionsObject);
-            var sessionObject = this.RunCommand(runspace, sessionCommand).Single().BaseObject;
+            var sessionObject = RunLocalCommand(runspace, sessionCommand).Single().BaseObject;
             return sessionObject;
         }
 
@@ -277,7 +288,16 @@ namespace Naos.WinRM
             }
         }
 
-        private List<PSObject> RunCommand(Runspace runspace, Command arbitraryCommand)
+        private void ManageTrustedHosts()
+        {
+            if (this.autoManageTrustedHosts)
+            {
+                AddIpAddressToLocalTrusedHosts(this.privateIpAddress);
+                this.autoManageTrustedHosts = false;
+            }
+        }
+
+        private static List<PSObject> RunLocalCommand(Runspace runspace, Command arbitraryCommand)
         {
             using (var powershell = PowerShell.Create())
             {
@@ -287,7 +307,7 @@ namespace Naos.WinRM
 
                 var output = powershell.Invoke();
 
-                this.ThrowOnError(powershell, arbitraryCommand.CommandText);
+                ThrowOnError(powershell, arbitraryCommand.CommandText, "localhost");
 
                 var ret = output.ToList();
                 return ret;
@@ -296,11 +316,16 @@ namespace Naos.WinRM
 
         private void ThrowOnError(PowerShell powershell, string attemptedScriptBlock)
         {
+            ThrowOnError(powershell, attemptedScriptBlock, this.privateIpAddress);
+        }
+
+        private static void ThrowOnError(PowerShell powershell, string attemptedScriptBlock, string ipAddress)
+        {
             if (powershell.Streams.Error.Count > 0)
             {
                 var errorString = powershell.Streams.Error.Select(_ => _.ErrorDetails.Message + Environment.NewLine);
                 throw new RemoteExecutionException(
-                    "Failed to run script (" + attemptedScriptBlock + ") on " + this.privateIpAddress + " got errors: "
+                    "Failed to run script (" + attemptedScriptBlock + ") on " + ipAddress + " got errors: "
                     + errorString);
             }
         }
