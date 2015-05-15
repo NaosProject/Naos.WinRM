@@ -129,8 +129,6 @@ namespace Naos.WinRM
         /// <inheritdoc />
         public void Reboot(bool force = true)
         {
-            this.ManageTrustedHosts();
-
             var forceAddIn = force ? " -Force" : string.Empty;
             var restartScriptBlock = "{ Restart-Computer" + forceAddIn + " }";
             this.RunScript(restartScriptBlock);
@@ -139,8 +137,6 @@ namespace Naos.WinRM
         /// <inheritdoc />
         public void SendFile(string filePathOnTargetMachine, byte[] fileContents, bool appended = false)
         {
-            this.ManageTrustedHosts();
-
             using (var runspace = RunspaceFactory.CreateRunspace())
             {
                 runspace.Open();
@@ -210,8 +206,6 @@ namespace Naos.WinRM
         /// <inheritdoc />
         public ICollection<dynamic> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters = null)
         {
-            this.ManageTrustedHosts();
-
             List<object> ret = null;
 
             using (var runspace = RunspaceFactory.CreateRunspace())
@@ -239,6 +233,12 @@ namespace Naos.WinRM
 
         private object BeginSession(Runspace runspace)
         {
+            if (this.autoManageTrustedHosts)
+            {
+                AddIpAddressToLocalTrusedHosts(this.privateIpAddress);
+                this.autoManageTrustedHosts = false;
+            }
+
             var powershellCredentials = new PSCredential(this.username, this.password);
 
             var sessionOptionsCommand = new Command("New-PSSessionOption");
@@ -285,15 +285,6 @@ namespace Naos.WinRM
 
                 var ret = output.Cast<dynamic>().ToList();
                 return ret;
-            }
-        }
-
-        private void ManageTrustedHosts()
-        {
-            if (this.autoManageTrustedHosts)
-            {
-                AddIpAddressToLocalTrusedHosts(this.privateIpAddress);
-                this.autoManageTrustedHosts = false;
             }
         }
 
