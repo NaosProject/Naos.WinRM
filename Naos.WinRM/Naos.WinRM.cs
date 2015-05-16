@@ -314,7 +314,7 @@ namespace Naos.WinRM
         {
             if (powershell.Streams.Error.Count > 0)
             {
-                var errorString = powershell.Streams.Error.Select(_ => _.ErrorDetails.Message + Environment.NewLine);
+                var errorString = string.Join(Environment.NewLine, powershell.Streams.Error.Select(_ => _.ErrorDetails));
                 throw new RemoteExecutionException(
                     "Failed to run script (" + attemptedScriptBlock + ") on " + ipAddress + " got errors: "
                     + errorString);
