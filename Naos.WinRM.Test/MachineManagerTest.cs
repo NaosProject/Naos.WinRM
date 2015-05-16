@@ -21,7 +21,8 @@ namespace Naos.WinRM.Test
             var machineManager = new MachineManager(
                 "10.0.0.1",
                 "Administrator",
-                MachineManager.ConvertStringToSecureString("password"));
+                MachineManager.ConvertStringToSecureString("password"),
+                true);
 
             var fileObjects = machineManager.RunScript("{ param($path) ls $path }", new[] { @"D:\Temp" });
         }
