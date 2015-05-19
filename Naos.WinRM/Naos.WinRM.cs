@@ -8,16 +8,46 @@ namespace Naos.WinRM
 {
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics;
     using System.Linq;
     using System.Management.Automation;
     using System.Management.Automation.Runspaces;
     using System.Security;
+    using System.Security.Cryptography;
+
+    /// <summary>
+    /// Custom base exception to allow global catching of internally generated errors.
+    /// </summary>
+    public abstract class NaosWinRmExceptionBase : Exception
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="NaosWinRmExceptionBase"/> class.
+        /// </summary>
+        /// <param name="message">Exception message.</param>
+        protected NaosWinRmExceptionBase(string message)
+            : base(message)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Custom exception for when trying to execute 
+    /// </summary>
+    public class TrustedHostMissingException : NaosWinRmExceptionBase
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TrustedHostMissingException"/> class.
+        /// </summary>
+        /// <param name="message">Exception message.</param>
+        public TrustedHostMissingException(string message)
+            : base(message)
+        {
+        }
+    }
 
     /// <summary>
     /// Custom exception for when things go wrong running remote commands.
     /// </summary>
-    public class RemoteExecutionException : Exception
+    public class RemoteExecutionException : NaosWinRmExceptionBase
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="RemoteExecutionException"/> class.
@@ -97,16 +127,74 @@ namespace Naos.WinRM
         /// <param name="ipAddress">IP Address to add to local trusted hosts.</param>
         public static void AddIpAddressToLocalTrusedHosts(string ipAddress)
         {
+            var currentTrustedHosts = GetListOfIpAddressesFromLocalTrustedHosts().ToList();
+
+            if (!currentTrustedHosts.Contains(ipAddress))
+            {
+                currentTrustedHosts.Add(ipAddress);
+                var newValue = currentTrustedHosts.Any() ? string.Join(",", currentTrustedHosts) : ipAddress;
+                using (var runspace = RunspaceFactory.CreateRunspace())
+                {
+                    runspace.Open();
+
+                    var command = new Command("Set-Item");
+                    command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
+                    command.Parameters.Add("Value", newValue);
+                    command.Parameters.Add("Force", true);
+
+                    var notUsedOutput = RunLocalCommand(runspace, command);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Locally updates the trusted hosts to remove the ipAddress provided (if applicable).
+        /// </summary>
+        /// <param name="ipAddress">IP Address to remove from local trusted hosts.</param>
+        public static void RemoveIpAddressFromLocalTrusedHosts(string ipAddress)
+        {
+            var currentTrustedHosts = GetListOfIpAddressesFromLocalTrustedHosts().ToList();
+
+            if (currentTrustedHosts.Contains(ipAddress))
+            {
+                currentTrustedHosts.Remove(ipAddress);
+                var newValue = currentTrustedHosts.Any() ? string.Join(",", currentTrustedHosts) : string.Empty; // can't pass null must be an empty string...
+                using (var runspace = RunspaceFactory.CreateRunspace())
+                {
+                    runspace.Open();
+
+                    var command = new Command("Set-Item");
+                    command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
+                    command.Parameters.Add("Value", newValue);
+                    command.Parameters.Add("Force", true);
+
+                    var notUsedOutput = RunLocalCommand(runspace, command);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Locally updates the trusted hosts to have the ipAddress provided.
+        /// </summary>
+        /// <returns>List of the trusted hosts.</returns>
+        public static ICollection<string> GetListOfIpAddressesFromLocalTrustedHosts()
+        {
             using (var runspace = RunspaceFactory.CreateRunspace())
             {
                 runspace.Open();
 
-                var command = new Command("Set-Item");
+                var command = new Command("Get-Item");
                 command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
-                command.Parameters.Add("Value", ipAddress);
-                command.Parameters.Add("Force", true);
 
-                var notUsedOutput = RunLocalCommand(runspace, command);
+                var response = RunLocalCommand(runspace, command);
+
+                var valueProperty = response.Single().Properties.Single(_ => _.Name == "Value");
+
+                var value = valueProperty.Value.ToString();
+
+                var ret = string.IsNullOrEmpty(value) ? new string[0] : value.Split(',');
+
+                return ret;
             }
         }
 
@@ -143,6 +231,25 @@ namespace Naos.WinRM
 
                 var sessionObject = this.BeginSession(runspace);
 
+                var verifyFileDoesntExistScriptBlock = @"
+	                { 
+		                param($filePath)
+
+			            if (Test-Path $filePath)
+			            {
+				            Write-Error ""File already exists at: $filePath""
+			            }
+	                }";
+
+                if (!appended)
+                {
+                    this.RunScriptSessioned(
+                        verifyFileDoesntExistScriptBlock,
+                        new[] { filePathOnTargetMachine },
+                        runspace,
+                        sessionObject);
+                }
+
                 if (fileContents.Length <= FileChunkSizeThresholdByteCount)
                 {
                     this.SendFileSessioned(filePathOnTargetMachine, fileContents, appended, runspace, sessionObject);
@@ -159,6 +266,7 @@ namespace Naos.WinRM
                         }
                         else
                         {
+                            nibble.Add(currentByte);
                             this.SendFileSessioned(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
                             nibble.Clear();
                         }
@@ -168,8 +276,51 @@ namespace Naos.WinRM
                     if (nibble.Any())
                     {
                         this.SendFileSessioned(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
+                        nibble.Clear();
                     }
                 }
+
+                var expectedChecksum = ComputeSha256Hash(fileContents);
+                var verifyChecksumScriptBlock = @"
+	                { 
+		                param($filePath, $expectedChecksum)
+
+		                $fileToCheckFileInfo = New-Object System.IO.FileInfo($filePath)
+		                if (-not $fileToCheckFileInfo.Exists)
+		                {
+			                # If the file can't be found, try looking for it in the current directory.
+			                $fileToCheckFileInfo = New-Object System.IO.FileInfo($filePath)
+			                if (-not $fileToCheckFileInfo.Exists)
+			                {
+				                throw ""Can't find the file specified to calculate a checksum on: $filePath""
+			                }
+		                }
+
+		                $fileToCheckFileStream = $fileToCheckFileInfo.OpenRead()
+                        $provider = New-Object System.Security.Cryptography.SHA256CryptoServiceProvider
+                        $hashBytes = $provider.ComputeHash($fileToCheckFileStream)
+		                $fileToCheckFileStream.Close()
+		                $fileToCheckFileStream.Dispose()
+		
+		                $base64 = [System.Convert]::ToBase64String($hashBytes)
+		
+		                $calculatedChecksum = [System.String]::Empty
+		                foreach ($byte in $hashBytes)
+		                {
+			                $calculatedChecksum = $calculatedChecksum + $byte.ToString(""X2"")
+		                }
+
+		                if($calculatedChecksum -ne $expectedChecksum)
+		                {
+			                Write-Error ""Checksums don't match on File: $filePath - Expected: $expectedChecksum - Actual: $calculatedChecksum""
+		                }
+	                }";
+
+                this.RunScriptSessioned(
+                    verifyChecksumScriptBlock,
+                    new[] { filePathOnTargetMachine, expectedChecksum },
+                    runspace,
+                    sessionObject);
 
                 this.EndSession(sessionObject, runspace);
 
@@ -226,6 +377,11 @@ namespace Naos.WinRM
 
         private void EndSession(object sessionObject, Runspace runspace)
         {
+            if (this.autoManageTrustedHosts)
+            {
+                RemoveIpAddressFromLocalTrusedHosts(this.privateIpAddress);
+            }
+
             var removeSessionCommand = new Command("Remove-PSSession");
             removeSessionCommand.Parameters.Add("Session", sessionObject);
             var unneededOutput = RunLocalCommand(runspace, removeSessionCommand);
@@ -236,7 +392,14 @@ namespace Naos.WinRM
             if (this.autoManageTrustedHosts)
             {
                 AddIpAddressToLocalTrusedHosts(this.privateIpAddress);
-                this.autoManageTrustedHosts = false;
+            }
+
+            var trustedHosts = GetListOfIpAddressesFromLocalTrustedHosts();
+            if (!trustedHosts.Contains(this.privateIpAddress))
+            {
+                throw new TrustedHostMissingException(
+                    "Cannot execute a remote command with out the IP address being added to the trusted hosts list.  Please set MachineManager to handle this automatically or add the address manually: "
+                    + this.privateIpAddress);
             }
 
             var powershellCredentials = new PSCredential(this.username, this.password);
@@ -314,11 +477,30 @@ namespace Naos.WinRM
         {
             if (powershell.Streams.Error.Count > 0)
             {
-                var errorString = powershell.Streams.Error.Select(_ => _.ErrorDetails.Message + Environment.NewLine);
+                var errorString = string.Join(
+                    Environment.NewLine,
+                    powershell.Streams.Error.Select(
+                        _ =>
+                        (_.ErrorDetails == null ? null : _.ErrorDetails.ToString())
+                        ?? (_.Exception == null ? "Naos.WinRM: No error message available" : _.Exception.ToString())));
                 throw new RemoteExecutionException(
                     "Failed to run script (" + attemptedScriptBlock + ") on " + ipAddress + " got errors: "
                     + errorString);
             }
+        }
+
+        private static string ComputeSha256Hash(byte[] bytes)
+        {
+            var provider = new SHA256Managed();
+            var hashBytes = provider.ComputeHash(bytes);
+            var calculatedChecksum = string.Empty;
+
+            foreach (byte x in hashBytes)
+            {
+                calculatedChecksum += string.Format("{0:x2}", x);
+            }
+
+            return calculatedChecksum;
         }
     }
 }
