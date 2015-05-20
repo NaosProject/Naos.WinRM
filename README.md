@@ -8,7 +8,7 @@
 
 Naos.WinRM
 ================
-A .NET wrapper for the WinRM protocol to execute powershell and also send files!
+A .NET wrapper for the WinRM protocol to execute Powershell, optionally auto-manage TrustedHost list, and send files!
 
 Use - Referencing in your code
 -----------
@@ -22,7 +22,8 @@ The entire implemenation is in a single file so it can be included without takin
 var machineManager = new MachineManager(
 	"10.0.0.1",
 	"Administrator",
-	MachineManager.ConvertStringToSecureString("xxx"));
+	MachineManager.ConvertStringToSecureString("xxx"),
+	true);
 
 // will perform a user initiated reboot.
 machineManager.Reboot();
