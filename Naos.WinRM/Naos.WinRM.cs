@@ -65,6 +65,11 @@ namespace Naos.WinRM
     public interface IManageMachines
     {
         /// <summary>
+        /// Gets the IP address of the machine being managed.
+        /// </summary>
+        string IpAddress { get; }
+
+        /// <summary>
         /// Executes a user initiated reboot.
         /// </summary>
         /// <param name="force">Can override default behavior of a forceful reboot (kick users off).</param>
@@ -94,28 +99,26 @@ namespace Naos.WinRM
 
         private const long FileChunkSizePerSend = 100000;
 
-        private readonly string privateIpAddress;
-
         private readonly string username;
 
         private readonly SecureString password;
 
-        private bool autoManageTrustedHosts;
+        private readonly bool autoManageTrustedHosts;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="MachineManager"/> class.
         /// </summary>
-        /// <param name="privateIpAddress">Private IP address of machine to interact with.</param>
+        /// <param name="ipAddress">IP address of machine to interact with.</param>
         /// <param name="username">Username to use to connect.</param>
         /// <param name="password">Password to use to connect.</param>
         /// <param name="autoManageTrustedHosts">Optionally specify whether to update the TrustedHost list prior to execution or assume it's handled elsewhere (default is FALSE).</param>
         public MachineManager(
-            string privateIpAddress, 
+            string ipAddress, 
             string username, 
             SecureString password, 
             bool autoManageTrustedHosts = false)
         {
-            this.privateIpAddress = privateIpAddress;
+            this.IpAddress = ipAddress;
             this.username = username;
             this.password = password;
             this.autoManageTrustedHosts = autoManageTrustedHosts;
@@ -213,6 +216,9 @@ namespace Naos.WinRM
 
             return ret;
         }
+
+        /// <inheritdoc />
+        public string IpAddress { get; private set; }
 
         /// <inheritdoc />
         public void Reboot(bool force = true)
@@ -379,7 +385,7 @@ namespace Naos.WinRM
         {
             if (this.autoManageTrustedHosts)
             {
-                RemoveIpAddressFromLocalTrusedHosts(this.privateIpAddress);
+                RemoveIpAddressFromLocalTrusedHosts(this.IpAddress);
             }
 
             var removeSessionCommand = new Command("Remove-PSSession");
@@ -391,15 +397,15 @@ namespace Naos.WinRM
         {
             if (this.autoManageTrustedHosts)
             {
-                AddIpAddressToLocalTrusedHosts(this.privateIpAddress);
+                AddIpAddressToLocalTrusedHosts(this.IpAddress);
             }
 
             var trustedHosts = GetListOfIpAddressesFromLocalTrustedHosts();
-            if (!trustedHosts.Contains(this.privateIpAddress))
+            if (!trustedHosts.Contains(this.IpAddress))
             {
                 throw new TrustedHostMissingException(
                     "Cannot execute a remote command with out the IP address being added to the trusted hosts list.  Please set MachineManager to handle this automatically or add the address manually: "
-                    + this.privateIpAddress);
+                    + this.IpAddress);
             }
 
             var powershellCredentials = new PSCredential(this.username, this.password);
@@ -410,7 +416,7 @@ namespace Naos.WinRM
             var sessionOptionsObject = RunLocalCommand(runspace, sessionOptionsCommand).Single().BaseObject;
 
             var sessionCommand = new Command("New-PSSession");
-            sessionCommand.Parameters.Add("ComputerName", this.privateIpAddress);
+            sessionCommand.Parameters.Add("ComputerName", this.IpAddress);
             sessionCommand.Parameters.Add("Credential", powershellCredentials);
             sessionCommand.Parameters.Add("SessionOption", sessionOptionsObject);
             var sessionObject = RunLocalCommand(runspace, sessionCommand).Single().BaseObject;
@@ -470,7 +476,7 @@ namespace Naos.WinRM
 
         private void ThrowOnError(PowerShell powershell, string attemptedScriptBlock)
         {
-            ThrowOnError(powershell, attemptedScriptBlock, this.privateIpAddress);
+            ThrowOnError(powershell, attemptedScriptBlock, this.IpAddress);
         }
 
         private static void ThrowOnError(PowerShell powershell, string attemptedScriptBlock, string ipAddress)
