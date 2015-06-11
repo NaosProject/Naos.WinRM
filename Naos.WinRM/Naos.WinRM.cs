@@ -95,9 +95,9 @@ namespace Naos.WinRM
     /// <inheritdoc />
     public class MachineManager : IManageMachines
     {
-        private const long FileChunkSizeThresholdByteCount = 150000;
+        private readonly long fileChunkSizeThresholdByteCount;
 
-        private const long FileChunkSizePerSend = 100000;
+        private readonly long fileChunkSizePerSend;
 
         private readonly string username;
 
@@ -112,16 +112,22 @@ namespace Naos.WinRM
         /// <param name="username">Username to use to connect.</param>
         /// <param name="password">Password to use to connect.</param>
         /// <param name="autoManageTrustedHosts">Optionally specify whether to update the TrustedHost list prior to execution or assume it's handled elsewhere (default is FALSE).</param>
+        /// <param name="fileChunkSizeThresholdByteCount">Optionally specify file size that will trigger chunking the file rather than sending as one file (150000 is default).</param>
+        /// <param name="fileChunkSizePerSend">Optionally specify size of each chunk that is sent when a file is being chunked.</param>
         public MachineManager(
             string ipAddress, 
             string username, 
             SecureString password, 
-            bool autoManageTrustedHosts = false)
+            bool autoManageTrustedHosts = false,
+            long fileChunkSizeThresholdByteCount = 150000,
+            long fileChunkSizePerSend = 100000)
         {
             this.IpAddress = ipAddress;
             this.username = username;
             this.password = password;
             this.autoManageTrustedHosts = autoManageTrustedHosts;
+            this.fileChunkSizeThresholdByteCount = fileChunkSizeThresholdByteCount;
+            this.fileChunkSizePerSend = fileChunkSizePerSend;
         }
 
         /// <summary>
@@ -249,16 +255,16 @@ namespace Naos.WinRM
 
                 if (!appended)
                 {
-                    this.RunScriptSessioned(
+                    this.RunScriptUsingSession(
                         verifyFileDoesntExistScriptBlock,
                         new[] { filePathOnTargetMachine },
                         runspace,
                         sessionObject);
                 }
 
-                if (fileContents.Length <= FileChunkSizeThresholdByteCount)
+                if (fileContents.Length <= this.fileChunkSizeThresholdByteCount)
                 {
-                    this.SendFileSessioned(filePathOnTargetMachine, fileContents, appended, runspace, sessionObject);
+                    this.SendFileUsingSession(filePathOnTargetMachine, fileContents, appended, runspace, sessionObject);
                 }
                 else
                 {
@@ -266,14 +272,14 @@ namespace Naos.WinRM
                     var nibble = new List<byte>();
                     foreach (byte currentByte in fileContents)
                     {
-                        if (nibble.Count < FileChunkSizePerSend)
+                        if (nibble.Count < this.fileChunkSizePerSend)
                         {
                             nibble.Add(currentByte);
                         }
                         else
                         {
                             nibble.Add(currentByte);
-                            this.SendFileSessioned(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
+                            this.SendFileUsingSession(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
                             nibble.Clear();
                         }
                     }
@@ -281,7 +287,7 @@ namespace Naos.WinRM
                     // flush the "buffer"...
                     if (nibble.Any())
                     {
-                        this.SendFileSessioned(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
+                        this.SendFileUsingSession(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
                         nibble.Clear();
                     }
                 }
@@ -322,7 +328,7 @@ namespace Naos.WinRM
 		                }
 	                }";
 
-                this.RunScriptSessioned(
+                this.RunScriptUsingSession(
                     verifyChecksumScriptBlock,
                     new[] { filePathOnTargetMachine, expectedChecksum },
                     runspace,
@@ -334,7 +340,7 @@ namespace Naos.WinRM
             }
         }
 
-        private void SendFileSessioned(
+        private void SendFileUsingSession(
             string filePathOnTargetMachine,
             byte[] fileContents,
             bool appended,
@@ -357,13 +363,13 @@ namespace Naos.WinRM
 
             var arguments = new object[] { filePathOnTargetMachine, fileContents };
 
-            var notUsedResults = this.RunScriptSessioned(sendFileScriptBlock, arguments, runspace, sessionObject);
+            var notUsedResults = this.RunScriptUsingSession(sendFileScriptBlock, arguments, runspace, sessionObject);
         }
 
         /// <inheritdoc />
         public ICollection<dynamic> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters = null)
         {
-            List<object> ret = null;
+            List<object> ret;
 
             using (var runspace = RunspaceFactory.CreateRunspace())
             {
@@ -371,7 +377,7 @@ namespace Naos.WinRM
 
                 var sessionObject = this.BeginSession(runspace);
 
-                ret = this.RunScriptSessioned(scriptBlock, scriptBlockParameters, runspace, sessionObject);
+                ret = this.RunScriptUsingSession(scriptBlock, scriptBlockParameters, runspace, sessionObject);
 
                 this.EndSession(sessionObject, runspace);
 
@@ -423,7 +429,7 @@ namespace Naos.WinRM
             return sessionObject;
         }
 
-        private List<dynamic> RunScriptSessioned(
+        private List<dynamic> RunScriptUsingSession(
             string scriptBlock,
             ICollection<object> scriptBlockParameters,
             Runspace runspace,
