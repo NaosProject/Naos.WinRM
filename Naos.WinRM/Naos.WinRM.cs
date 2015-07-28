@@ -208,15 +208,16 @@ namespace Naos.WinRM
                     return ret;
                 }
             }
-            catch (ItemNotFoundException itemNotFoundException)
+            catch (RemoteExecutionException remoteException)
             {
                 // if we don't have any trusted hosts then just ignore...
-                if (itemNotFoundException.Message
-                    == "Cannot find path 'WSMan:\\localhost\\Client\\TrustedHosts' because it does not exist.")
+                if (
+                    remoteException.Message.Contains(
+                        "Cannot find path 'WSMan:\\localhost\\Client\\TrustedHosts' because it does not exist."))
                 {
                     return new List<string>();
                 }
-                
+
                 throw;
             }
         }
