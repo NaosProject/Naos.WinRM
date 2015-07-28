@@ -188,22 +188,37 @@ namespace Naos.WinRM
         /// <returns>List of the trusted hosts.</returns>
         public static ICollection<string> GetListOfIpAddressesFromLocalTrustedHosts()
         {
-            using (var runspace = RunspaceFactory.CreateRunspace())
+            try
             {
-                runspace.Open();
+                using (var runspace = RunspaceFactory.CreateRunspace())
+                {
+                    runspace.Open();
 
-                var command = new Command("Get-Item");
-                command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
+                    var command = new Command("Get-Item");
+                    command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
 
-                var response = RunLocalCommand(runspace, command);
+                    var response = RunLocalCommand(runspace, command);
 
-                var valueProperty = response.Single().Properties.Single(_ => _.Name == "Value");
+                    var valueProperty = response.Single().Properties.Single(_ => _.Name == "Value");
 
-                var value = valueProperty.Value.ToString();
+                    var value = valueProperty.Value.ToString();
 
-                var ret = string.IsNullOrEmpty(value) ? new string[0] : value.Split(',');
+                    var ret = string.IsNullOrEmpty(value) ? new string[0] : value.Split(',');
 
-                return ret;
+                    return ret;
+                }
+            }
+            catch (RemoteExecutionException remoteException)
+            {
+                // if we don't have any trusted hosts then just ignore...
+                if (
+                    remoteException.Message.Contains(
+                        "Cannot find path 'WSMan:\\localhost\\Client\\TrustedHosts' because it does not exist."))
+                {
+                    return new List<string>();
+                }
+
+                throw;
             }
         }
 
