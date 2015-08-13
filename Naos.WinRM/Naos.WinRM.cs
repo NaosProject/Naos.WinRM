@@ -8,6 +8,7 @@ namespace Naos.WinRM
 {
     using System;
     using System.Collections.Generic;
+    using System.Collections.ObjectModel;
     using System.Linq;
     using System.Management.Automation;
     using System.Management.Automation.Runspaces;
@@ -81,7 +82,32 @@ namespace Naos.WinRM
         /// <param name="filePathOnTargetMachine">File path to write the contents to on the remote machine.</param>
         /// <param name="fileContents">Payload to write to the file.</param>
         /// <param name="appended">Optionally writes the bytes in appended mode or not (default is NOT).</param>
-        void SendFile(string filePathOnTargetMachine, byte[] fileContents, bool appended = false);
+        /// <param name="overwrite">Optionally will overwrite a file that is already there [can NOT be used with 'appended'] (default is NOT).</param>
+        void SendFile(string filePathOnTargetMachine, byte[] fileContents, bool appended = false, bool overwrite = false);
+
+        /// <summary>
+        /// Runs an arbitrary command using "CMD.exe /c".
+        /// </summary>
+        /// <param name="command">Command to run in "CMD.exe".</param>
+        /// <param name="commandParameters">Parameters to be passed to the command.</param>
+        /// <returns>Console output of the command.</returns>
+        string RunCmd(string command, ICollection<string> commandParameters = null);
+
+        /// <summary>
+        /// Runs an arbitrary command using "CMD.exe /c" on localhost instead of the provided remote computer..
+        /// </summary>
+        /// <param name="command">Command to run in "CMD.exe".</param>
+        /// <param name="commandParameters">Parameters to be passed to the command.</param>
+        /// <returns>Console output of the command.</returns>
+        string RunCmdOnLocalhost(string command, ICollection<string> commandParameters = null);
+
+        /// <summary>
+        /// Runs an arbitrary script block on localhost instead of the provided remote computer.
+        /// </summary>
+        /// <param name="scriptBlock">Script block.</param>
+        /// <param name="scriptBlockParameters">Parameters to be passed to the script block.</param>
+        /// <returns>Collection of objects that were the output from the script block.</returns>
+        ICollection<dynamic> RunScriptOnLocalhost(string scriptBlock, ICollection<object> scriptBlockParameters = null);
 
         /// <summary>
         /// Runs an arbitrary script block.
@@ -89,7 +115,7 @@ namespace Naos.WinRM
         /// <param name="scriptBlock">Script block.</param>
         /// <param name="scriptBlockParameters">Parameters to be passed to the script block.</param>
         /// <returns>Collection of objects that were the output from the script block.</returns>
-        ICollection<dynamic> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters);
+        ICollection<dynamic> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters = null);
     }
 
     /// <inheritdoc />
@@ -250,8 +276,13 @@ namespace Naos.WinRM
         }
 
         /// <inheritdoc />
-        public void SendFile(string filePathOnTargetMachine, byte[] fileContents, bool appended = false)
+        public void SendFile(string filePathOnTargetMachine, byte[] fileContents, bool appended = false, bool overwrite = false)
         {
+            if (appended && overwrite)
+            {
+                throw new ArgumentException("Cannot run with overwrite AND appended.");
+            }
+
             using (var runspace = RunspaceFactory.CreateRunspace())
             {
                 runspace.Open();
@@ -264,11 +295,11 @@ namespace Naos.WinRM
 
 			            if (Test-Path $filePath)
 			            {
-				            Write-Error ""File already exists at: $filePath""
+				            throw ""File already exists at: $filePath""
 			            }
 	                }";
 
-                if (!appended)
+                if (!appended && !overwrite)
                 {
                     this.RunScriptUsingSession(
                         verifyFileDoesntExistScriptBlock,
@@ -277,9 +308,10 @@ namespace Naos.WinRM
                         sessionObject);
                 }
 
+                var firstSendUsingSession = true;
                 if (fileContents.Length <= this.fileChunkSizeThresholdByteCount)
                 {
-                    this.SendFileUsingSession(filePathOnTargetMachine, fileContents, appended, runspace, sessionObject);
+                    this.SendFileUsingSession(filePathOnTargetMachine, fileContents, appended, overwrite, runspace, sessionObject);
                 }
                 else
                 {
@@ -294,7 +326,8 @@ namespace Naos.WinRM
                         else
                         {
                             nibble.Add(currentByte);
-                            this.SendFileUsingSession(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
+                            this.SendFileUsingSession(filePathOnTargetMachine, nibble.ToArray(), true, overwrite && firstSendUsingSession, runspace, sessionObject);
+                            firstSendUsingSession = false;
                             nibble.Clear();
                         }
                     }
@@ -302,7 +335,7 @@ namespace Naos.WinRM
                     // flush the "buffer"...
                     if (nibble.Any())
                     {
-                        this.SendFileUsingSession(filePathOnTargetMachine, nibble.ToArray(), true, runspace, sessionObject);
+                        this.SendFileUsingSession(filePathOnTargetMachine, nibble.ToArray(), true, false, runspace, sessionObject);
                         nibble.Clear();
                     }
                 }
@@ -359,10 +392,17 @@ namespace Naos.WinRM
             string filePathOnTargetMachine,
             byte[] fileContents,
             bool appended,
+            bool overwrite,
             Runspace runspace,
             object sessionObject)
         {
+            if (appended && overwrite)
+            {
+                throw new ArgumentException("Cannot run with overwrite AND appended.");
+            }
+
             var commandName = appended ? "Add-Content" : "Set-Content";
+            var forceAddIn = overwrite ? " -Force" : string.Empty;
             var sendFileScriptBlock = @"
 	                { 
 		                param($filePath, $fileContents)
@@ -373,12 +413,62 @@ namespace Naos.WinRM
 			                md $parentDir | Out-Null
 		                }
 
-		                " + commandName + @" -Path $filePath -Encoding Byte -Value $fileContents
+		                " + commandName + @" -Path $filePath -Encoding Byte -Value $fileContents" + forceAddIn + @"
 	                }";
 
             var arguments = new object[] { filePathOnTargetMachine, fileContents };
 
             var notUsedResults = this.RunScriptUsingSession(sendFileScriptBlock, arguments, runspace, sessionObject);
+        }
+
+        /// <inheritdoc />
+        public string RunCmd(string command, ICollection<string> commandParameters = null)
+        {
+            var scriptBlock = BuildCmdScriptBlock(command, commandParameters);
+            var outputObjects = this.RunScript(scriptBlock);
+            var ret = string.Join(Environment.NewLine, outputObjects);
+            return ret;
+        }
+
+        /// <inheritdoc />
+        public string RunCmdOnLocalhost(string command, ICollection<string> commandParameters = null)
+        {
+            var scriptBlock = BuildCmdScriptBlock(command, commandParameters);
+            var outputObjects = this.RunScriptOnLocalhost(scriptBlock);
+            var ret = string.Join(Environment.NewLine, outputObjects);
+            return ret;
+        }
+
+        private static string BuildCmdScriptBlock(string command, ICollection<string> commandParameters)
+        {
+            var line = " `\"" + command + "`\"";
+            foreach (var commandParameter in commandParameters ?? new List<string>())
+            {
+                line += " `\"" + commandParameter + "`\"";
+            }
+
+            line = "\"" + line + "\"";
+
+            var scriptBlock = "{ &cmd.exe /c " + line + " 2>&1 | Write-Output }";
+            return scriptBlock;
+        }
+
+        /// <inheritdoc />
+        public ICollection<dynamic> RunScriptOnLocalhost(string scriptBlock, ICollection<object> scriptBlockParameters = null)
+        {
+            List<object> ret;
+
+            using (var runspace = RunspaceFactory.CreateRunspace())
+            {
+                runspace.Open();
+
+                // just send a null session for localhost execution
+                ret = this.RunScriptUsingSession(scriptBlock, scriptBlockParameters, runspace, null);
+
+                runspace.Close();
+            }
+
+            return ret;
         }
 
         /// <inheritdoc />
@@ -453,23 +543,43 @@ namespace Naos.WinRM
             using (var powershell = PowerShell.Create())
             {
                 powershell.Runspace = runspace;
-                var variableNameArgs = "scriptBlockArgs";
-                var variableNameSession = "invokeCommandSession";
 
-                powershell.Runspace.SessionStateProxy.SetVariable(variableNameSession, sessionObject);
+                Collection<PSObject> output;
 
-                var argsAddIn = string.Empty;
-                if (scriptBlockParameters != null && scriptBlockParameters.Count > 0)
+                // session will implicitly assume remote - if null then localhost...
+                if (sessionObject != null)
                 {
-                    powershell.Runspace.SessionStateProxy.SetVariable(variableNameArgs, scriptBlockParameters.ToArray());
-                    argsAddIn = " -ArgumentList $" + variableNameArgs;
+                    var variableNameArgs = "scriptBlockArgs";
+                    var variableNameSession = "invokeCommandSession";
+                    powershell.Runspace.SessionStateProxy.SetVariable(variableNameSession, sessionObject);
+
+                    var argsAddIn = string.Empty;
+                    if (scriptBlockParameters != null && scriptBlockParameters.Count > 0)
+                    {
+                        powershell.Runspace.SessionStateProxy.SetVariable(
+                            variableNameArgs,
+                            scriptBlockParameters.ToArray());
+                        argsAddIn = " -ArgumentList $" + variableNameArgs;
+                    }
+
+                    var fullScript = "$sc = " + scriptBlock + Environment.NewLine + "Invoke-Command -Session $"
+                                     + variableNameSession + argsAddIn + " -ScriptBlock $sc";
+
+                    powershell.AddScript(fullScript);
+                    output = powershell.Invoke();
                 }
+                else
+                {
+                    var fullScript = "$sc = " + scriptBlock + Environment.NewLine + "Invoke-Command -ScriptBlock $sc";
 
-                var fullScript = "$sc = " + scriptBlock + Environment.NewLine + "Invoke-Command -Session $"
-                                 + variableNameSession + argsAddIn + " -ScriptBlock $sc";
-                powershell.AddScript(fullScript);
+                    powershell.AddScript(fullScript);
+                    foreach (var scriptBlockParameter in scriptBlockParameters ?? new List<object>())
+                    {
+                        powershell.AddArgument(scriptBlockParameter);
+                    }
 
-                var output = powershell.Invoke();
+                    output = powershell.Invoke(scriptBlockParameters);
+                }
 
                 this.ThrowOnError(powershell, scriptBlock);
 
