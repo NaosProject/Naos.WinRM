@@ -6,6 +6,7 @@
       <Value>Aws</Value>
       <Value>bool</Value>
       <Value>nullable</Value>
+      <Value>localhost</Value>
       <Value>pluralization</Value>
       <Value>json</Value>
       <Value>ip</Value>
