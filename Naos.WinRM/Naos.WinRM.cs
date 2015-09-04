@@ -131,6 +131,8 @@ namespace Naos.WinRM
 
         private readonly bool autoManageTrustedHosts;
 
+        private static readonly object SyncTrustedHosts = new object();
+
         /// <summary>
         /// Initializes a new instance of the <see cref="MachineManager"/> class.
         /// </summary>
@@ -162,22 +164,25 @@ namespace Naos.WinRM
         /// <param name="ipAddress">IP Address to add to local trusted hosts.</param>
         public static void AddIpAddressToLocalTrusedHosts(string ipAddress)
         {
-            var currentTrustedHosts = GetListOfIpAddressesFromLocalTrustedHosts().ToList();
-
-            if (!currentTrustedHosts.Contains(ipAddress))
+            lock (SyncTrustedHosts)
             {
-                currentTrustedHosts.Add(ipAddress);
-                var newValue = currentTrustedHosts.Any() ? string.Join(",", currentTrustedHosts) : ipAddress;
-                using (var runspace = RunspaceFactory.CreateRunspace())
+                var currentTrustedHosts = GetListOfIpAddressesFromLocalTrustedHosts().ToList();
+
+                if (!currentTrustedHosts.Contains(ipAddress))
                 {
-                    runspace.Open();
+                    currentTrustedHosts.Add(ipAddress);
+                    var newValue = currentTrustedHosts.Any() ? string.Join(",", currentTrustedHosts) : ipAddress;
+                    using (var runspace = RunspaceFactory.CreateRunspace())
+                    {
+                        runspace.Open();
 
-                    var command = new Command("Set-Item");
-                    command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
-                    command.Parameters.Add("Value", newValue);
-                    command.Parameters.Add("Force", true);
+                        var command = new Command("Set-Item");
+                        command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
+                        command.Parameters.Add("Value", newValue);
+                        command.Parameters.Add("Force", true);
 
-                    var notUsedOutput = RunLocalCommand(runspace, command);
+                        var notUsedOutput = RunLocalCommand(runspace, command);
+                    }
                 }
             }
         }
@@ -188,22 +193,28 @@ namespace Naos.WinRM
         /// <param name="ipAddress">IP Address to remove from local trusted hosts.</param>
         public static void RemoveIpAddressFromLocalTrusedHosts(string ipAddress)
         {
-            var currentTrustedHosts = GetListOfIpAddressesFromLocalTrustedHosts().ToList();
-
-            if (currentTrustedHosts.Contains(ipAddress))
+            lock (SyncTrustedHosts)
             {
-                currentTrustedHosts.Remove(ipAddress);
-                var newValue = currentTrustedHosts.Any() ? string.Join(",", currentTrustedHosts) : string.Empty; // can't pass null must be an empty string...
-                using (var runspace = RunspaceFactory.CreateRunspace())
+                var currentTrustedHosts = GetListOfIpAddressesFromLocalTrustedHosts().ToList();
+
+                if (currentTrustedHosts.Contains(ipAddress))
                 {
-                    runspace.Open();
+                    currentTrustedHosts.Remove(ipAddress);
 
-                    var command = new Command("Set-Item");
-                    command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
-                    command.Parameters.Add("Value", newValue);
-                    command.Parameters.Add("Force", true);
+                    // can't pass null must be an empty string...
+                    var newValue = currentTrustedHosts.Any() ? string.Join(",", currentTrustedHosts) : string.Empty;
 
-                    var notUsedOutput = RunLocalCommand(runspace, command);
+                    using (var runspace = RunspaceFactory.CreateRunspace())
+                    {
+                        runspace.Open();
+
+                        var command = new Command("Set-Item");
+                        command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
+                        command.Parameters.Add("Value", newValue);
+                        command.Parameters.Add("Force", true);
+
+                        var notUsedOutput = RunLocalCommand(runspace, command);
+                    }
                 }
             }
         }
@@ -214,37 +225,40 @@ namespace Naos.WinRM
         /// <returns>List of the trusted hosts.</returns>
         public static ICollection<string> GetListOfIpAddressesFromLocalTrustedHosts()
         {
-            try
+            lock (SyncTrustedHosts)
             {
-                using (var runspace = RunspaceFactory.CreateRunspace())
+                try
                 {
-                    runspace.Open();
+                    using (var runspace = RunspaceFactory.CreateRunspace())
+                    {
+                        runspace.Open();
 
-                    var command = new Command("Get-Item");
-                    command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
+                        var command = new Command("Get-Item");
+                        command.Parameters.Add("Path", @"WSMan:\localhost\Client\TrustedHosts");
 
-                    var response = RunLocalCommand(runspace, command);
+                        var response = RunLocalCommand(runspace, command);
 
-                    var valueProperty = response.Single().Properties.Single(_ => _.Name == "Value");
+                        var valueProperty = response.Single().Properties.Single(_ => _.Name == "Value");
 
-                    var value = valueProperty.Value.ToString();
+                        var value = valueProperty.Value.ToString();
 
-                    var ret = string.IsNullOrEmpty(value) ? new string[0] : value.Split(',');
+                        var ret = string.IsNullOrEmpty(value) ? new string[0] : value.Split(',');
 
-                    return ret;
+                        return ret;
+                    }
                 }
-            }
-            catch (RemoteExecutionException remoteException)
-            {
-                // if we don't have any trusted hosts then just ignore...
-                if (
-                    remoteException.Message.Contains(
-                        "Cannot find path 'WSMan:\\localhost\\Client\\TrustedHosts' because it does not exist."))
+                catch (RemoteExecutionException remoteException)
                 {
-                    return new List<string>();
-                }
+                    // if we don't have any trusted hosts then just ignore...
+                    if (
+                        remoteException.Message.Contains(
+                            "Cannot find path 'WSMan:\\localhost\\Client\\TrustedHosts' because it does not exist."))
+                    {
+                        return new List<string>();
+                    }
 
-                throw;
+                    throw;
+                }
             }
         }
 
@@ -546,6 +560,12 @@ namespace Naos.WinRM
 
                 Collection<PSObject> output;
 
+                // write-host will fail due to not being interactive so replace to write-output which will come back on the stream.
+                var attemptedScriptBlock = scriptBlock.Replace(
+                    "Write-Host",
+                    "Write-Output",
+                    StringComparison.CurrentCultureIgnoreCase);
+
                 // session will implicitly assume remote - if null then localhost...
                 if (sessionObject != null)
                 {
@@ -562,7 +582,7 @@ namespace Naos.WinRM
                         argsAddIn = " -ArgumentList $" + variableNameArgs;
                     }
 
-                    var fullScript = "$sc = " + scriptBlock + Environment.NewLine + "Invoke-Command -Session $"
+                    var fullScript = "$sc = " + attemptedScriptBlock + Environment.NewLine + "Invoke-Command -Session $"
                                      + variableNameSession + argsAddIn + " -ScriptBlock $sc";
 
                     powershell.AddScript(fullScript);
@@ -570,7 +590,7 @@ namespace Naos.WinRM
                 }
                 else
                 {
-                    var fullScript = "$sc = " + scriptBlock + Environment.NewLine + "Invoke-Command -ScriptBlock $sc";
+                    var fullScript = "$sc = " + attemptedScriptBlock + Environment.NewLine + "Invoke-Command -ScriptBlock $sc";
 
                     powershell.AddScript(fullScript);
                     foreach (var scriptBlockParameter in scriptBlockParameters ?? new List<object>())
@@ -581,7 +601,7 @@ namespace Naos.WinRM
                     output = powershell.Invoke(scriptBlockParameters);
                 }
 
-                this.ThrowOnError(powershell, scriptBlock);
+                this.ThrowOnError(powershell, attemptedScriptBlock);
 
                 var ret = output.Cast<dynamic>().ToList();
                 return ret;
@@ -638,6 +658,29 @@ namespace Naos.WinRM
             }
 
             return calculatedChecksum;
+        }
+    }
+
+    internal static class Extensions
+    {
+        public static string Replace(this string source, string oldString, string newString, StringComparison comp)
+        {
+            // from: 
+            var index = source.IndexOf(oldString, comp);
+
+            // Determine if we found a match
+            var matchFound = index >= 0;
+
+            if (matchFound)
+            {
+                // Remove the old text
+                source = source.Remove(index, oldString.Length);
+
+                // Add the replacement text
+                source = source.Insert(index, newString);
+            }
+
+            return source;
         }
     }
 }
