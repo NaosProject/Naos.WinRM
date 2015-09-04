@@ -560,12 +560,6 @@ namespace Naos.WinRM
 
                 Collection<PSObject> output;
 
-                // write-host will fail due to not being interactive so replace to write-output which will come back on the stream.
-                var attemptedScriptBlock = scriptBlock.Replace(
-                    "Write-Host",
-                    "Write-Output",
-                    StringComparison.CurrentCultureIgnoreCase);
-
                 // session will implicitly assume remote - if null then localhost...
                 if (sessionObject != null)
                 {
@@ -582,7 +576,7 @@ namespace Naos.WinRM
                         argsAddIn = " -ArgumentList $" + variableNameArgs;
                     }
 
-                    var fullScript = "$sc = " + attemptedScriptBlock + Environment.NewLine + "Invoke-Command -Session $"
+                    var fullScript = "$sc = " + scriptBlock + Environment.NewLine + "Invoke-Command -Session $"
                                      + variableNameSession + argsAddIn + " -ScriptBlock $sc";
 
                     powershell.AddScript(fullScript);
@@ -590,7 +584,7 @@ namespace Naos.WinRM
                 }
                 else
                 {
-                    var fullScript = "$sc = " + attemptedScriptBlock + Environment.NewLine + "Invoke-Command -ScriptBlock $sc";
+                    var fullScript = "$sc = " + scriptBlock + Environment.NewLine + "Invoke-Command -ScriptBlock $sc";
 
                     powershell.AddScript(fullScript);
                     foreach (var scriptBlockParameter in scriptBlockParameters ?? new List<object>())
@@ -601,7 +595,7 @@ namespace Naos.WinRM
                     output = powershell.Invoke(scriptBlockParameters);
                 }
 
-                this.ThrowOnError(powershell, attemptedScriptBlock);
+                this.ThrowOnError(powershell, scriptBlock);
 
                 var ret = output.Cast<dynamic>().ToList();
                 return ret;
@@ -658,29 +652,6 @@ namespace Naos.WinRM
             }
 
             return calculatedChecksum;
-        }
-    }
-
-    internal static class Extensions
-    {
-        public static string Replace(this string source, string oldString, string newString, StringComparison comp)
-        {
-            // from: 
-            var index = source.IndexOf(oldString, comp);
-
-            // Determine if we found a match
-            var matchFound = index >= 0;
-
-            if (matchFound)
-            {
-                // Remove the old text
-                source = source.Remove(index, oldString.Length);
-
-                // Add the replacement text
-                source = source.Insert(index, newString);
-            }
-
-            return source;
         }
     }
 }
