@@ -86,6 +86,13 @@ namespace Naos.WinRM
         void SendFile(string filePathOnTargetMachine, byte[] fileContents, bool appended = false, bool overwrite = false);
 
         /// <summary>
+        /// Retrieves a file from the remote machines and returns a checksum verified byte array.
+        /// </summary>
+        /// <param name="filePathOnTargetMachine">File path to fetch the contents of on the remote machine.</param>
+        /// <returns>Bytes of the specified files (throws if missing).</returns>
+        byte[] RetrieveFile(string filePathOnTargetMachine);
+
+        /// <summary>
         /// Runs an arbitrary command using "CMD.exe /c".
         /// </summary>
         /// <param name="command">Command to run in "CMD.exe".</param>
@@ -125,6 +132,8 @@ namespace Naos.WinRM
 
         private readonly long fileChunkSizePerSend;
 
+        private readonly long fileChunkSizePerRetrieve;
+
         private readonly string username;
 
         private readonly SecureString password;
@@ -141,14 +150,16 @@ namespace Naos.WinRM
         /// <param name="password">Password to use to connect.</param>
         /// <param name="autoManageTrustedHosts">Optionally specify whether to update the TrustedHost list prior to execution or assume it's handled elsewhere (default is FALSE).</param>
         /// <param name="fileChunkSizeThresholdByteCount">Optionally specify file size that will trigger chunking the file rather than sending as one file (150000 is default).</param>
-        /// <param name="fileChunkSizePerSend">Optionally specify size of each chunk that is sent when a file is being chunked.</param>
+        /// <param name="fileChunkSizePerSend">Optionally specify size of each chunk that is sent when a file is being chunked for send.</param>
+        /// <param name="fileChunkSizePerRetrieve">Optionally specify size of each chunk that is received when a file is being chunked for fetch.</param>
         public MachineManager(
             string ipAddress, 
             string username, 
             SecureString password, 
             bool autoManageTrustedHosts = false,
             long fileChunkSizeThresholdByteCount = 150000,
-            long fileChunkSizePerSend = 100000)
+            long fileChunkSizePerSend = 100000,
+            long fileChunkSizePerRetrieve = 100000)
         {
             this.IpAddress = ipAddress;
             this.username = username;
@@ -156,6 +167,7 @@ namespace Naos.WinRM
             this.autoManageTrustedHosts = autoManageTrustedHosts;
             this.fileChunkSizeThresholdByteCount = fileChunkSizeThresholdByteCount;
             this.fileChunkSizePerSend = fileChunkSizePerSend;
+            this.fileChunkSizePerRetrieve = fileChunkSizePerRetrieve;
         }
 
         /// <summary>
@@ -433,6 +445,161 @@ namespace Naos.WinRM
             var arguments = new object[] { filePathOnTargetMachine, fileContents };
 
             var notUsedResults = this.RunScriptUsingSession(sendFileScriptBlock, arguments, runspace, sessionObject);
+        }
+
+        /// <inheritdoc />
+        public byte[] RetrieveFile(string filePathOnTargetMachine)
+        {
+            using (var runspace = RunspaceFactory.CreateRunspace())
+            {
+                runspace.Open();
+
+                var sessionObject = this.BeginSession(runspace);
+
+                var verifyFileExistsScriptBlock = @"
+	                { 
+		                param($filePath)
+
+			            if (-not (Test-Path $filePath))
+			            {
+				            throw ""File doesn't exist at: $filePath""
+			            }
+
+                        $file = ls $filePath
+                        Write-Output $file.Length
+	                }";
+
+                var fileSizeRaw = this.RunScriptUsingSession(
+                    verifyFileExistsScriptBlock,
+                    new[] { filePathOnTargetMachine },
+                    runspace,
+                    sessionObject);
+
+                var fileSize = (long)long.Parse(fileSizeRaw.Single().ToString());
+
+                var getChecksumScriptBlock = @"
+	                { 
+		                param($filePath)
+
+		                $fileToCheckFileInfo = New-Object System.IO.FileInfo($filePath)
+		                if (-not $fileToCheckFileInfo.Exists)
+		                {
+			                # If the file can't be found, try looking for it in the current directory.
+			                $fileToCheckFileInfo = New-Object System.IO.FileInfo($filePath)
+			                if (-not $fileToCheckFileInfo.Exists)
+			                {
+				                throw ""Can't find the file specified to calculate a checksum on: $filePath""
+			                }
+		                }
+
+		                $fileToCheckFileStream = $fileToCheckFileInfo.OpenRead()
+                        $provider = New-Object System.Security.Cryptography.SHA256CryptoServiceProvider
+                        $hashBytes = $provider.ComputeHash($fileToCheckFileStream)
+		                $fileToCheckFileStream.Close()
+		                $fileToCheckFileStream.Dispose()
+		
+		                $base64 = [System.Convert]::ToBase64String($hashBytes)
+		
+		                $calculatedChecksum = [System.String]::Empty
+		                foreach ($byte in $hashBytes)
+		                {
+			                $calculatedChecksum = $calculatedChecksum + $byte.ToString(""X2"")
+		                }
+		                
+                        # trimming off leading and trailing curly braces '{ }'
+		                $trimmedChecksum = $calculatedChecksum.Substring(1, $calculatedChecksum.Length - 2)
+
+                        Write-Output $trimmedChecksum
+	                }";
+
+                var remoteChecksumRaw = this.RunScriptUsingSession(
+                    getChecksumScriptBlock,
+                    new[] { filePathOnTargetMachine },
+                    runspace,
+                    sessionObject);
+
+                var remoteChecksum = remoteChecksumRaw.Single();
+
+                var bytes = new List<byte>();
+                if (fileSize <= this.fileChunkSizeThresholdByteCount)
+                {
+                    var bytesRaw = this.RetrieveFileUsingSession(filePathOnTargetMachine, runspace, sessionObject);
+                    bytes.AddRange(bytesRaw);
+                }
+                else
+                {
+                    // deconstruct and fetch pieces...
+                    var lastNibblePoint = 0;
+                    for (var nibblePoint = 0; nibblePoint < fileSize; nibblePoint++)
+                    {
+                        if ((nibblePoint - lastNibblePoint) >= this.fileChunkSizePerRetrieve)
+                        {
+                            var remainingBytes = fileSize - nibblePoint;
+                            var nibbleSize = remainingBytes < this.fileChunkSizePerRetrieve
+                                                 ? remainingBytes
+                                                 : this.fileChunkSizePerRetrieve;
+
+                            var nibble = this.RetrieveFileUsingSession(
+                                filePathOnTargetMachine,
+                                runspace,
+                                sessionObject,
+                                lastNibblePoint,
+                                nibbleSize);
+                            bytes.AddRange(nibble);
+                            lastNibblePoint = nibblePoint;
+                        }
+                    }
+                }
+
+                var byteArray = bytes.ToArray();
+                var actualChecksum = ComputeSha256Hash(byteArray);
+                if (string.Equals(remoteChecksum.ToString(), actualChecksum.ToString(), StringComparison.CurrentCultureIgnoreCase))
+                {
+                    throw new RemoteExecutionException("Checksum didn't match after file was downloaded.");
+                }
+
+                this.EndSession(sessionObject, runspace);
+
+                runspace.Close();
+
+                return byteArray;
+            }
+        }
+
+        private byte[] RetrieveFileUsingSession(string filePathOnTargetMachine, Runspace runspace, object sessionObject, long nibbleStart = 0, long nibbleSize = 0)
+        {
+            if (nibbleStart != 0 && nibbleSize == 0)
+            {
+                nibbleSize = this.fileChunkSizePerRetrieve;
+            }
+
+            var fetchFileScriptBlock = @"
+	                { 
+		                param($filePath, $nibbleStart, $nibbleSize)
+
+		                if (-not (Test-Path $filePath))
+		                {
+			                throw ""Expected file to fetch missing at: $filePath""
+		                }
+
+                        $allBytes = [System.IO.File]::ReadAllBytes($filePath)
+                        if (($nibbleStart -eq 0) -and ($nibbleSize -eq 0))
+                        {
+                            Write-Output $allBytes
+                        }
+                        else
+                        {
+                            $nibble = new-object byte[] $nibbleSize
+                            [Array]::Copy($allBytes, $nibbleStart, $nibble, 0, $nibbleSize)
+                            Write-Output $nibble
+                        }
+	                }";
+
+            var arguments = new object[] { filePathOnTargetMachine, nibbleStart, nibbleSize };
+
+            var bytesRaw = this.RunScriptUsingSession(fetchFileScriptBlock, arguments, runspace, sessionObject);
+            var bytes = bytesRaw.Select(_ => (byte)byte.Parse(_.ToString())).ToArray();
+            return bytes;
         }
 
         /// <inheritdoc />

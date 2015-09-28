@@ -39,10 +39,11 @@ var output = machineManager.RunCmd("xcopy", new[] { "D:\\File.txt", "D:\\Folder\
 machineManager.RunScriptOnLocalhost(...);
 machineManager.RunCmdOnLocalhost(...);
 
-// can transfer files to the remote server (over WinRM's protocol!).
+// can transfer files to AND from the remote server (over WinRM's protocol!).
 var localFilePath = @"D:\Temp\BigFileLocal.nupkg";
 var fileBytes = File.ReadAllBytes(localFilePath);
 var remoteFilePath = @"D:\Temp\BigFileRemote.nupkg";
 
 machineManager.SendFile(remoteFilePath, fileBytes);
+var downloadedBytes = machineManager.RetrieveFile(remoteFilePath);
 ```
