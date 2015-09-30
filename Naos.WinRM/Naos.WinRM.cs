@@ -352,7 +352,7 @@ namespace Naos.WinRM
                         else
                         {
                             nibble.Add(currentByte);
-                            this.SendFileUsingSession(filePathOnTargetMachine, nibble.ToArray(), true, overwrite && firstSendUsingSession, runspace, sessionObject);
+                            this.SendFileUsingSession(filePathOnTargetMachine, nibble.ToArray(), !firstSendUsingSession, overwrite && firstSendUsingSession, runspace, sessionObject);
                             firstSendUsingSession = false;
                             nibble.Clear();
                         }
