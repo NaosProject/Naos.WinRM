@@ -8,7 +8,7 @@
 
 Naos.WinRM
 ================
-A .NET wrapper for the WinRM protocol to execute Powershell, optionally auto-manage TrustedHost list, and send files!
+A .NET wrapper for the WinRM protocol to remotely execute Powershell, optionally auto-manage TrustedHost list, and send/receive files!
 
 Use - Referencing in your code
 -----------

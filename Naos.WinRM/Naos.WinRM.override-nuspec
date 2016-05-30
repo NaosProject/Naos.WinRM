@@ -1,0 +1,6 @@
+﻿<?xml version="1.0"?>
+<package>
+  <metadata>
+    <description>A .NET wrapper for the WinRM protocol to remotely execute Powershell, optionally auto-manage TrustedHost list, and send/receive files!</description>
+  </metadata>
+</package>
