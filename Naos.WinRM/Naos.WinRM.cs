@@ -799,8 +799,8 @@ namespace Naos.WinRM
                     Environment.NewLine,
                     powershell.Streams.Error.Select(
                         _ =>
-                        (_.ErrorDetails == null ? null : _.ErrorDetails.ToString())
-                        ?? (_.Exception == null ? "Naos.WinRM: No error message available" : _.Exception.ToString())));
+                        (_.ErrorDetails == null ? null : _.ErrorDetails.ToString() + " at " + _.ScriptStackTrace)
+                        ?? (_.Exception == null ? "Naos.WinRM: No error message available" : _.Exception.ToString() + " at " + _.ScriptStackTrace)));
                 throw new RemoteExecutionException(
                     "Failed to run script (" + attemptedScriptBlock + ") on " + ipAddress + " got errors: "
                     + errorString);
