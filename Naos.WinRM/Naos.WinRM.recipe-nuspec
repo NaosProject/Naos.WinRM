@@ -1,0 +1,10 @@
+﻿<?xml version="1.0"?>
+<package>
+  <metadata>
+    <id>Naos.Recipes.WinRM</id>
+    <description>A recipe (compile in C# file instead of DLL reference) version of Naos.WinRM, a .NET wrapper for the WinRM protocol to remotely execute Powershell, optionally auto-manage TrustedHost list, and send/receive files!</description>
+  </metadata>
+  <files>
+    <file src="Naos.WinRM.cs" target="content/45/.Naos.Recipes/Naos.WinRM.cs" />
+  </files>
+</package>
