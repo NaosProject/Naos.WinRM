@@ -6,25 +6,22 @@
 
 namespace Naos.WinRM.Test
 {
-    using System;
-    using System.Diagnostics;
-    using System.IO;
+    using Spritely.Recipes;
 
     using Xunit;
 
     public class MachineManagerTest
     {
-        // [Fact]
+        [Fact(Skip = "Debug test designed to illustrate usage.")]
         public static void Examples()
         {
-            // this was used for debugging but provides an example case.
             var machineManager = new MachineManager(
                 "10.0.0.1",
                 "Administrator",
-                MachineManager.ConvertStringToSecureString("password"),
+                "password".ToSecureString(),
                 true);
 
-            var fileObjects = machineManager.RunScript("{ param($path) ls $path }", new[] { @"D:\Temp" });
+            var powershellFileObjects = machineManager.RunScript("{ param($path) ls $path }", new[] { @"D:\Temp" });
         }
     }
 }
