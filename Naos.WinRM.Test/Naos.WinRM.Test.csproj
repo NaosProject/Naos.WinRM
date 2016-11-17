@@ -60,7 +60,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Naos.WinRM\Naos.WinRM.csproj">
-      <Project>{6C12BDA4-0C3F-4314-9DCA-E0BA272F65CC}</Project>
+      <Project>{6c12bda4-0c3f-4314-9dca-e0ba272f65cc}</Project>
       <Name>Naos.WinRM</Name>
     </ProjectReference>
   </ItemGroup>
