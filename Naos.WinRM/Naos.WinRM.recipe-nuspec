@@ -10,6 +10,6 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="Naos.WinRM.cs" target="content/net45/.Naos.Recipes/Naos.WinRM.cs" />
+    <file src="Naos.WinRM.cs" target="content/net45/.recipes/Naos.WinRM/Naos.WinRM.cs" />
   </files>
 </package>
