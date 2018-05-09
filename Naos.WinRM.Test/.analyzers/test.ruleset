@@ -1,0 +1,310 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RuleSet Name="Analyzer Rules - Testing" Description="Analyzer rules for test projects." ToolsVersion="14.0">
+  <IncludeAll Action="Warning" />
+  <Rules AnalyzerId="Microsoft.Analyzers.ManagedCodeAnalysis" RuleNamespace="Microsoft.Rules.Managed">
+    
+    <!--
+      ** Do not nest generic types in member signatures **
+      This becomes a problem with async code when we are returning a Task<GENERIC_TYPE_HERE> 
+      (e.g. Task<List<string>>).   CA sees this as nested generic types, whereas the Task<T> layer 
+      is required to get async working.
+    -->
+    <Rule Id="CA1006" Action="None" />
+
+    <!--
+      ** Use properties where appropriate **
+      We disagree that methods that start with the term 'Get' and take no parameters are better implemented
+      as properties.  We tend to write classes that are POCOs and/or immutable or containers for static
+      methods and we shy away from stateful objects with layers of inheritance.  As such, when we use 'Get'
+      our methods are most often doing work.  In practice, this rule almost always produces false positives.  
+    -->
+    <Rule Id="CA1024" Action="None" />
+
+    <!--
+      ** Use events where appropriate **
+      This rule is triggered by methods that start with certain terms (e.g. Fire). There's is no examination
+      of what the method is actually doing.  As such, it produces false positives in test projects where
+      those terms make the methods more readable.
+    -->
+    <Rule Id="CA1030" Action="None" />
+
+    <!--
+      ** Do not catch general exception types **
+      We are philosophically against this rule and believe that in most cases it is not worth the developer 
+      time (or worse, it's error-prone) to reason thru all of the concrete exceptions that can be thrown by
+      some line of code, particularly because we don't use exceptions for flow control.  If we are 
+      try/catching, it's typically binary - something bad happened and we want to react in a certain way 
+      regardless of the specifics.
+    -->
+    <Rule Id="CA1031" Action="None" />
+
+    <!--
+      ** Validate arguments of public methods **
+      Public methods in test projects do not have external callers and it's too burdensome to require 
+      validation of arguments.
+    -->
+    <Rule Id="CA1062" Action="None" />
+
+    <!--
+      ** Do not pass literals as localized parameters **
+      More often than not, the literals we are passing around are used in back-end systems and are not
+      user-facing.  And anyways, we do not believe that a good solution to localization is compiling
+      resource tables into our assemblies.  If anything, we would do lookups from an external data store.
+    -->
+    <Rule Id="CA1303" Action="None" />
+
+    <!--
+      ** Specify CultureInfo **
+      related: CA1305
+      Test projects don't have locale-specific concerns (as it is, the vast majority of our release projects
+      also don't have locale-specific concerns).  Having to specify an IFormatProvider makes unit tests more
+      burdensome to write.
+    -->
+    <Rule Id="CA1304" Action="None" />
+
+    <!--
+      ** Specify IFormatProvider **
+      see notes for CA1304
+    -->
+    <Rule Id="CA1305" Action="None" />
+
+    <!--
+      ** Avoid excessive complexity **
+      related: CA1505, CA1506
+      Often enough, performing a test requires lots of types to setup the test or lots of assertions to
+      ensure that the result meet expectations and refactoring actually makes the test more difficult to
+      read or reason-thru.  In practice, this rule rarely drives refactoring of the code.
+    -->
+    <Rule Id="CA1502" Action="None" />
+    
+    <!--
+      ** Avoid unmaintainable code **
+      see notes for CA1502
+    -->
+    <Rule Id="CA1505" Action="None" />
+
+    <!--
+      ** Avoid excessive class coupling **
+      see notes for CA1502
+    -->
+    <Rule Id="CA1506" Action="None" />
+
+    <!--
+      ** Identifiers should not contain underscores **
+      related: CA1709
+      Underscores make unit test methods more readable.  Consider...
+      public static void BuildCastle___Should_return_a_castle_that_respects_parameter_minimumCastleSize___When_there_are_enough_resources_to_build_such_a_castle()
+
+      - versus -
+
+      public static void BuildCastleShouldReturnACastleThatRespectsParameterMinimumCastleSizeWhenThereAreEnoughResourcesToBuildSuchACastle()
+    -->
+    <Rule Id="CA1707" Action="None" />
+
+    <!--
+      ** Identifiers should be cased correctly **
+      see notes for CA1707      
+    -->
+    <Rule Id="CA1709" Action="None" />
+
+    <!--
+      ** Do not ignore method results **
+      In test projects, we need to be looser about what methods can do to be effective at testing.  For
+      example, a helper method might make some assertions before returning a value and some unit tests may
+      leverage the helper method only for the assertions.
+    -->
+    <Rule Id="CA1806" Action="None" />
+    
+    <!--
+      ** Mark members as static **
+      Often enough we create abstract classes and put setup logical in the constructor (e.g. Its.Config 
+      deserialization settings) so that unit test methods in concrete derivatives do not need to individually
+      perform the same setup.  Because the 'this' parameter is never used (the base class only has a 
+      constructor), CA wants us to mark the method as static.  But if we mark it as static, then the base 
+      class constructor isn't called.  We have tried making the base class constructor static and marking the 
+      unit test methods as static, but then CA wants us to make the unit test class static, but static 
+      classes can only derive from object, not other concrete or static classes.
+    -->
+    <Rule Id="CA1822" Action="None" />
+
+    <!--
+      ** Dispose objects before losing scope **
+      In test projects, we are more concerned with readability and coverage than we are with resource usage
+      and garbage collection.  These assemblies don't stay in memory for very long.  Consider...
+      
+      public static void My_test_method()
+      {
+          // Arrange
+          using (var ms = new MemoryStream())
+          {
+
+              // Act
+              var actual = MyWorker.WriteToStream(ms);
+          }
+
+          // Assert
+          actual.Should.HaveCount(10);
+      }
+
+      - versus -
+      
+      public static void My_test_method()
+      {
+          // Arrange
+          var ms = new MemoryStream();
+
+          // Act
+          var actual = MyWorker.WriteToStream(ms);
+          
+          // Assert
+          actual.Should.HaveCount(10);
+      }
+
+    The second example is far more readable and it doesn't really matter that we are not disposing the stream.    
+    -->    
+    <Rule Id="CA2000" Action="None" />
+
+    <!--
+      ** Do not dispose object multiple times **
+      In practice, this produces too many false positives.
+    -->
+    <Rule Id="CA2202" Action="None" />
+
+    <!--
+      ** Assemblies should have valid strong names **
+      We do not ship our assemblies to customers and thus not worth the effort to sign our assemblies.
+    -->
+    <Rule Id="CA2210" Action="None" />
+
+    <!--
+      ** Attribute string literals should parse correctly **
+      This prevents us from saving a pre-release nuget version in it's exact form (e.g. 1.0.269-some-fixes)
+      into the AssemblyInfo.cs file, in the AssemblyInformationalVersion attribute.  We do save a 
+      System.Version parseable version number into other attributes such as AssemblyVersion and 
+      AssemblyFileVersion (e.g. 1.0.269).
+    -->
+    <Rule Id="CA2243" Action="None" />
+  </Rules>
+  <Rules AnalyzerId="StyleCop.Analyzers" RuleNamespace="StyleCop.Analyzers">
+        
+    <!--
+      ** Xml comment analysis disabled **
+      related: SA1600
+      We don't generate XmlDocs for Test projects.  Xml comments are optional and most often not needed
+      because it is clear from the class and method names what is being tested.
+    -->
+    <Rule Id="SA0001" Action="None" />
+
+    <!--
+      ** Parameters must not span multiple lines **
+      This rule flags cases where we construct an object in-line and use an initializer.  Consider...
+
+      OpenMyStuff(new Dictionary<string, string>()
+			{
+	 		    "key", "value"
+      });
+
+      We want to be able to do the above.
+    -->
+    <Rule Id="SA1118" Action="None" />
+
+    <!--
+      ** Use readable conditions **
+      It's not clear what this is from the rule name: A comparison was made between a variable and a literal
+      or constant value, and the variable appeared on the right-hand side of the expression.
+
+      We want more flexability in test projects.  For example, when testing classes that implement
+      IEquatable<T>, it's useful to test the == operator in both configuations (e.g. x==y, y==x)
+      to ensure that method does not somehow rely on the order of inputs.
+    -->
+    <Rule Id="SA1131" Action="None" />
+
+    <!--    
+      ** Elements must appear in the correct order **
+      related: SA1202, SA1204
+      Sometimes, it improves readability to order elements by how they related to each other and not by
+      their access modifiers (e.g. public, private) or by the type of element (e.g. field, property).
+      There are patterns to how we break the out-of-the-box rules, but it would be difficult to teach the
+      analyzers about that, so we have decided to relax these checks and rely on developers to organize
+      in a prudent manner.
+      
+      For example:
+
+      private int MyIntField;
+
+      public int MethodThatUsesMyIntField()
+      {
+      }
+
+      private string MyStringField;
+
+      ...
+    -->
+    <Rule Id="SA1201" Action="None" />
+
+    <!--
+      ** Elements must be ordered by access **
+      see notes for SA1201
+    -->
+    <Rule Id="SA1202" Action="None" />
+
+    <!--
+      ** Static elements must appear before instance elements **
+      see notes for SA1201
+    -->
+    <Rule Id="SA1204" Action="None" />
+
+    <!--
+      ** Field names must not use hungarian notation **
+      We do not like hungarian notation.
+    -->
+    <Rule Id="SA1305" Action="Warning" />
+
+    <!--
+      ** File may only contain a single type **
+      It's reasonable to relax this rule in test projects where we are more likely to create container types.
+      This helps with file bloat and readability/maintainability of tests.
+    -->
+    <Rule Id="SA1402" Action="None" />
+
+    <!--
+      ** Elements must be documented **
+      See notes in SA0001
+    -->
+    <Rule Id="SA1600" Action="None" />
+    
+    <!--
+      ** Partial elements must be documented **
+      Only one of the partials' documentation will "win" in intellisense and documentation tools:
+      https://stackoverflow.com/questions/5984557/xml-commenting-on-partial-classes-methods/5985858#5985858
+      We can use <remarks> to note the need for the partial.  Its.CQRS projects, aggregates make heavy use of
+      partials and the partials just contain other classes that are documented, so there is no benefit to
+      documenting the partial.
+    -->
+    <Rule Id="SA1601" Action="None" />
+
+    <!--
+      ** Element documentation must not be copied and pasted **
+      This is a good indication of invalid documentation.
+    -->
+    <Rule Id="SA1625" Action="Warning" />
+
+    <!--
+      ** Documentation text must not be empty **
+      This is a good indication of missing documentation.
+    -->
+    <Rule Id="SA1627" Action="Warning" />
+
+    <!--
+      ** Documentation must end with a period **
+      This promotes good grammar.
+    -->
+    <Rule Id="SA1629" Action="Warning" />
+
+    <!--
+      ** Enable xml documentation output **
+      This drives consistency and ease of navigating the file tree.
+    -->
+    <Rule Id="SA1649" Action="Warning" />
+  </Rules>
+</RuleSet>

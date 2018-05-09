@@ -1,17 +1,16 @@
 ﻿// --------------------------------------------------------------------------------------------------------------------
 // <copyright file="MachineManagerTest.cs" company="Naos">
-//   Copyright 2015 Naos
+//    Copyright (c) Naos 2017. All Rights Reserved.
 // </copyright>
 // --------------------------------------------------------------------------------------------------------------------
 
 namespace Naos.WinRM.Test
 {
-    using Spritely.Recipes;
-
     using Xunit;
 
-    public class MachineManagerTest
+    public static class MachineManagerTest
     {
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Performance", "CA1804:RemoveUnusedLocals", MessageId = "powershellFileObjects", Justification = "Prefer to see that output is generated and not used...")]
         [Fact(Skip = "Debug test designed to illustrate usage.")]
         public static void Examples()
         {
