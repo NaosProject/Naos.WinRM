@@ -18,7 +18,7 @@ namespace Naos.WinRM.Test
                 "10.0.0.1",
                 "Administrator",
                 "password".ToSecureString(),
-                true);
+                autoManageTrustedHosts: true);
 
             var powershellFileObjects = machineManager.RunScript("{ param($path) ls $path }", new[] { @"D:\Temp" });
         }

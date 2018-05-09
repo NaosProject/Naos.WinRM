@@ -321,7 +321,7 @@ namespace Naos.WinRM
             {
                 var currentTrustedHosts = GetListOfIpAddressesFromLocalTrustedHosts().ToList();
 
-                if (!currentTrustedHosts.Contains(ipAddress))
+                if (!currentTrustedHosts.Contains(ipAddress) && !TrustedHostListIsWildCard(currentTrustedHosts))
                 {
                     currentTrustedHosts.Add(ipAddress);
                     var newValue = currentTrustedHosts.Any() ? string.Join(",", currentTrustedHosts) : ipAddress;
@@ -382,7 +382,7 @@ namespace Naos.WinRM
         /// <returns>List of the trusted hosts.</returns>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1704:IdentifiersShouldBeSpelledCorrectly", MessageId = "Ip", Justification = "Name/spelling is correct.")]
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1709:IdentifiersShouldBeCasedCorrectly", MessageId = "Ip", Justification = "Name/spelling is correct.")]
-        public static ICollection<string> GetListOfIpAddressesFromLocalTrustedHosts()
+        public static IReadOnlyCollection<string> GetListOfIpAddressesFromLocalTrustedHosts()
         {
             lock (SyncTrustedHosts)
             {
@@ -586,7 +586,7 @@ namespace Naos.WinRM
         }
 
         /// <inheritdoc />
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2202:Do not dispose objects multiple times")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2202:Do not dispose objects multiple times", Justification = "Disposal logic is correct.")]
         public byte[] RetrieveFile(string filePathOnTargetMachine)
         {
             using (var runspace = RunspaceFactory.CreateRunspace())
@@ -774,7 +774,7 @@ namespace Naos.WinRM
         }
 
         /// <inheritdoc />
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2202:Do not dispose objects multiple times")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2202:Do not dispose objects multiple times", Justification = "Disposal logic is correct.")]
         public ICollection<dynamic> RunScriptOnLocalhost(string scriptBlock, ICollection<object> scriptBlockParameters = null)
         {
             List<object> ret;
@@ -793,7 +793,7 @@ namespace Naos.WinRM
         }
 
         /// <inheritdoc />
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2202:Do not dispose objects multiple times")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2202:Do not dispose objects multiple times", Justification = "Disposal logic is correct.")]
         public ICollection<dynamic> RunScript(string scriptBlock, ICollection<object> scriptBlockParameters = null)
         {
             List<object> ret;
@@ -836,7 +836,7 @@ namespace Naos.WinRM
             }
 
             var trustedHosts = GetListOfIpAddressesFromLocalTrustedHosts();
-            if (!trustedHosts.Contains(this.IpAddress))
+            if (!trustedHosts.Contains(this.IpAddress) && !TrustedHostListIsWildCard(trustedHosts))
             {
                 throw new TrustedHostMissingException(
                     "Cannot execute a remote command with out the IP address being added to the trusted hosts list.  Please set MachineManager to handle this automatically or add the address manually: "
@@ -910,6 +910,11 @@ namespace Naos.WinRM
                 var ret = output.Cast<dynamic>().ToList();
                 return ret;
             }
+        }
+
+        private static bool TrustedHostListIsWildCard(IReadOnlyCollection<string> trustedHostList)
+        {
+            return trustedHostList.Count == 1 && trustedHostList.Single() == "*";
         }
 
         private static List<PSObject> RunLocalCommand(Runspace runspace, Command arbitraryCommand)
