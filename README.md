@@ -17,10 +17,10 @@ The entire implemenation is in a single file so it can be included without takin
 ```C#
 // this is the entrypoint to interact with the system (interfaced for testing).
 var machineManager = new MachineManager(
-	"10.0.0.1",
-	"Administrator",
-	MachineManager.ConvertStringToSecureString("xxx"),
-	true);
+    "10.0.0.1",
+    "Administrator",
+    "password".ToSecureString(),
+    autoManageTrustedHosts: true);
 
 // will perform a user initiated reboot.
 machineManager.Reboot();
