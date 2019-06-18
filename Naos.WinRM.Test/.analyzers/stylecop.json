@@ -1,35 +1,10 @@
 ﻿{
-  "$schema": "https://raw.githubusercontent.com/DotNetAnalyzers/StyleCopAnalyzers/master/StyleCop.Analyzers/StyleCop.Analyzers/Settings/stylecop.schema.json",
   "settings": {
     "documentationRules": {
-      "companyName": "Naos",
-      "copyrightText": "   Copyright (c) {companyName} 2017. All Rights Reserved.",
-      "xmlHeader": true,
-      "fileNamingConvention": "StyleCop"
-    },
-    "indentation": {
-      "indentationSize": 4,
-      "tabSize": 4,
-      "useTabs": false
-    },
-    "layoutRules": {
-      "newlineAtEndOfFile": "allow",
-      "allowConsecutiveUsings": false
-    },
-    "orderingRules": {
-      "usingDirectivesPlacement": "insideNamespace",
-      "systemUsingDirectivesFirst": true,
-      "blankLinesBetweenUsingGroups": "allow"
-    },
-    "namingRules": {
-      "allowCommonHungarianPrefixes": false,
-      "allowedHungarianPrefixes": [
-		"as",
-		"co",
-        "db",
-		"ip",
-		"to",
-      ]
+      "companyName": "Naos Project",
+      "copyrightText": "   Copyright (c) {companyName} 2019. All rights reserved.",
+      "variables": {
+      }
     }
   }
 }

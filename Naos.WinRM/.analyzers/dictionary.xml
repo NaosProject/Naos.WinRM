@@ -5,88 +5,29 @@
       <Word></Word>
     </Unrecognized>
     <Recognized>
-<!-- Describes data that was made anonymous -->
+      <Word>Accpac</Word>
+      <Word>additivize</Word>
+      <Word>additivized</Word>
+      <Word>additivization</Word>
       <Word>anonymized</Word>
-
-      <!-- Application Programming Interface -->
-      <Word>Api</Word>
-
-      <!-- The name of the SAAS platform we use for continuous integration -->
       <Word>AppVeyor</Word>
-
-      <!-- 
-      The name of the persistence store that contains information about cloud resources,
-      certificates, and other deployment-related concerns.
-      -->
-      <Word>arcology</Word>
-
-      <!-- The name of the .NET library we use to extract data from Excel files -->
       <Word>Aspose</Word>
-
-      <!-- Binary JSON -->
       <Word>Bson</Word>
-
-      <!-- Describes a boolean -->
       <Word>bool</Word>
-
-      <!-- The act of deserializing. -->
-      <Word>deserializes</Word>
-
-      <!-- Acronym for Extract, Transform, Load -->
-      <Word>ETL</Word>
-
-      <!-- Acronym for JavaScript Object Notation -->
+      <Word>Coop</Word>
+      <Word>Dist</Word>
+      <Word>FY</Word>
       <Word>json</Word>
-
-      <!-- The name of the SAAS platform we use for exploring log messages -->
       <Word>Loggly</Word>
-
-      <!-- The name of an open source organization on GitHub, lead by Lawson Caudill -->
       <Word>Naos</Word>
-
-      <!-- Represents a value Type in .NET that can be assigned null -->
       <Word>nullable</Word>
-
-      <!-- The name of an open source organization on GitHub, lead by Suraj Gupta -->
       <Word>OBeautifulCode</Word>
-
-      <!-- Synonym for parenthesis -->
-      <Word>parens</Word>
-
-      <!-- Acronym for Portable Document Format -->
+      <Word>pathed</Word>
       <Word>pdf</Word>
-
-      <!-- 
-      Describes something that persists information.  For example: a SubmissionPersistor
-      is responsible for persisting submissions.
-      -->
-      <Word>persistor</Word>
-
-      <!-- 
-      Commonly-used to describe a PKCS#12 file, which stores a private key 
-      and it's associated certificate chain. 
-      -->
-      <Word>PFX</Word>
-
-      <!-- Acronym for Secure Hash Algorithm. -->
-      <Word>SHA</Word>
-
-      <!-- A kind of entity in our entity system, which is a child of a Region -->
-      <Word>subregion</Word>
-
-
-      <!-- A thing that targets something else. -->
-
-      <Word>targeter</Word>
-
-      <!-- Refers to some piece of data that has not yet been validated -->
-      <Word>unvalidated</Word>
-
-      <!-- The file extension and file format for an Excel file -->
-      <Word>xls</Word>
-      <Word>xlsx</Word>
-
-      <!-- The name of the SAAS platform we us for customer service support tickets, and help articles -->
+      <Word>pluralization</Word>
+      <Word>tearsheet</Word>
+      <Word>tearsheets</Word>
+      <Word>whitespace</Word>
       <Word>Zendesk</Word>
     </Recognized>
     <Deprecated>
@@ -94,20 +35,18 @@
     </Deprecated>
     <Compound>
       <Term CompoundAlternate="CellPhone">cellphone</Term>
-           <Term CompoundAlternate="OBeautifulCode">obeautifulcode</Term>
+      <Term CompoundAlternate="OBeautifulCode">obeautifulcode</Term>
+      <Term CompoundAlternate="RollUp">rollup</Term>
       <Term CompoundAlternate="YearEnd">yearend</Term>
     </Compound>
     <DiscreteExceptions>
-      <!-- 
-      Describes the process of calculating the value of a node in a metric tree by 
-      combining the values of the nodes that are descendants of the reference node.
-      -->
-      <Term>rollup</Term>
+      <Term></Term>
     </DiscreteExceptions>
   </Words>
   <Acronyms>
     <CasingExceptions>
       <Acronym>Co</Acronym>
+      <Acronym>Etl</Acronym>
     </CasingExceptions>
   </Acronyms>
 </Dictionary>

@@ -2,170 +2,28 @@
 <RuleSet Name="Analyzer Rules" Description="Analyzer rules for non-test projects." ToolsVersion="14.0">
   <IncludeAll Action="Warning" />
   <Rules AnalyzerId="Microsoft.Analyzers.ManagedCodeAnalysis" RuleNamespace="Microsoft.Rules.Managed">
-    
-    <!--
-      ** Do not nest generic types in member signatures **
-      This becomes a problem with async code when we are returning a Task<GENERIC_TYPE_HERE> 
-      (e.g. Task<List<string>>).   CA sees this as nested generic types, whereas the Task<T> layer 
-      is required to get async working.
-    -->
     <Rule Id="CA1006" Action="None" />
-
-    <!--
-      ** Use properties where appropriate **
-      We disagree that methods that start with the term 'Get' and take no parameters are better implemented
-      as properties.  We tend to write classes that are POCOs and/or immutable or containers for static
-      methods and we shy away from stateful objects with layers of inheritance.  As such, when we use 'Get'
-      our methods are most often doing work.  In practice, this rule almost always produces false positives.  
-    -->
-    <Rule Id="CA1024" Action="None" />
-
-    <!--
-      ** Default parameters should not be used **
-      Default parameters are too useful to disallow.  According to the documentation "...the CLS
-      allows compilers to ignore the values that are assigned to these parameters," but we are not
-      using any such compiler.
-    -->
+    <Rule Id="CA1020" Action="None" />
     <Rule Id="CA1026" Action="None" />
-
-    <!--
-      ** Do not catch general exception types **
-      We are philosophically against this rule and believe that in most cases it is not worth the developer 
-      time (or worse, it's error-prone) to reason thru all of the concrete exceptions that can be thrown by
-      some line of code, particularly because we don't use exceptions for flow control.  If we are 
-      try/catching, it's typically binary - something bad happened and we want to react in a certain way 
-      regardless of the specifics.
-    -->
-    <Rule Id="CA1031" Action="None" />
-
-    <!--
-      ** Nested types should not be visible **
-      We are not in the habit of using/abusing nested types, but when we do use them it is a purposeful
-      choice.  For example, Its.CQRS-based projects make heavy use of nested types and it makes the
-      code easier to read and reason thru.
-    -->
     <Rule Id="CA1034" Action="None" />
-
-    <!--
-      ** Do not pass literals as localized parameters **
-      More often than not, the literals we are passing around are used in back-end systems and are not
-      user-facing.  And anyways, we do not believe that a good solution to localization is compiling
-      resource tables into our assemblies.  If anything, we would do lookups from an external data store.
-    -->
+    <Rule Id="CA1062" Action="None" />
     <Rule Id="CA1303" Action="None" />
-
-    <!--
-      ** Assemblies should have valid strong names **
-      We do not ship our assemblies to customers and thus not worth the effort to sign our assemblies
-    -->
-    <Rule Id="CA2210" Action="None" />
-
-    <!--
-      ** Attribute string literals should parse correctly **
-      This prevents us from saving a pre-release nuget version in it's exact form (e.g. 1.0.269-some-fixes)
-      into the AssemblyInfo.cs file, in the AssemblyInformationalVersion attribute.  We do save a 
-      System.Version parseable version number into other attributes such as AssemblyVersion and 
-      AssemblyFileVersion (e.g. 1.0.269).
-    -->
-    <Rule Id="CA2243" Action="None" />
+    <Rule Id="CA2210" Action="None" />    
   </Rules>
   <Rules AnalyzerId="StyleCop.Analyzers" RuleNamespace="StyleCop.Analyzers">
-    
-    <!--
-      ** Parameters must not span multiple lines **
-      This rule flags cases where we construct an object in-line and use an initializer.  Consider...
-
-      OpenMyStuff(new Dictionary<string, string>()
-			{
-	 		    "key", "value"
-      });
-
-      We want to be able to do the above.
-    -->
     <Rule Id="SA1118" Action="None" />
-
-    <!--    
-      ** Elements must appear in the correct order **
-      related: SA1202, SA1204
-      Sometimes, it improves readability to order elements by how they related to each other and not by
-      their access modifiers (e.g. public, private) or by the type of element (e.g. field, property).
-      There are patterns to how we break the out-of-the-box rules, but it would be difficult to teach the
-      analyzers about that, so we have decided to relax these checks and rely on developers to organize
-      in a prudent manner.
-      
-      For example:
-
-      private int MyIntField;
-
-      public int MethodThatUsesMyIntField()
-      {
-      }
-
-      private string MyStringField;
-
-      ...
-    -->
+    <Rule Id="SA1131" Action="None" />
     <Rule Id="SA1201" Action="None" />
-
-    <!--
-      ** Elements must be ordered by access **
-      see notes for SA1201
-    -->
     <Rule Id="SA1202" Action="None" />
-
-    <!--
-      ** Static elements must appear before instance elements **
-      see notes for SA1201
-    -->
     <Rule Id="SA1204" Action="None" />
-
-    <!--
-      ** Field names must not use hungarian notation **
-      We do not like hungarian notation.
-    -->
     <Rule Id="SA1305" Action="Warning" />
-
-    <!--
-      ** File may only contain a single type **
-      In practice we typically only put a single type in a file, but often enough it's handy to group types
-      together to improve comprehension of the code.  For example, when we use Spritely.ReadModel it's
-      better to put a Query and it's QueryHandler in the same file rather than split them up because they are
-      highly related.
-    -->
     <Rule Id="SA1402" Action="None" />
-
-    <!--
-      ** Partial elements must be documented **
-      Only one of the partials' documentation will "win" in intellisense and documentation tools:
-      https://stackoverflow.com/questions/5984557/xml-commenting-on-partial-classes-methods/5985858#5985858
-      We can use <remarks> to note the need for the partial.  Its.CQRS projects, aggregates make heavy use of
-      partials and the partials just contain other classes that are documented, so there is no benefit to
-      documenting the partial.
-    -->
+    <Rule Id="SA1512" Action="None" />
+    <Rule Id="SA1515" Action="None" />
     <Rule Id="SA1601" Action="None" />
-
-    <!--
-      ** Element documentation must not be copied and pasted **
-      This is a good indication of invalid documentation.
-    -->
     <Rule Id="SA1625" Action="Warning" />
-
-    <!--
-      ** Documentation text must not be empty **
-      This is a good indication of missing documentation.
-    -->
     <Rule Id="SA1627" Action="Warning" />
-
-    <!--
-      ** Documentation must end with a period **
-      This promotes good grammar.
-    -->
     <Rule Id="SA1629" Action="Warning" />
-
-    <!--
-      ** File name must match type name **
-      This drives consistency and ease of navigating the file tree.
-    -->
     <Rule Id="SA1649" Action="Warning" />
   </Rules>
 </RuleSet>
