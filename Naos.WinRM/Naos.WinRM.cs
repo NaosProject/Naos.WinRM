@@ -383,7 +383,7 @@ namespace Naos.WinRM
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1024:UsePropertiesWhereAppropriate", Justification = "Want a method due to amount of logic.")]
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1704:IdentifiersShouldBeSpelledCorrectly", MessageId = "Ip", Justification = "Name/spelling is correct.")]
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1709:IdentifiersShouldBeCasedCorrectly", MessageId = "Ip", Justification = "Name/spelling is correct.")]
-        public static IReadOnlyCollection<string> GetListOfIpAddressesFromLocalTrustedHosts()
+        public static IEnumerable<string> GetListOfIpAddressesFromLocalTrustedHosts()
         {
             lock (SyncTrustedHosts)
             {
@@ -913,9 +913,9 @@ namespace Naos.WinRM
             }
         }
 
-        private static bool TrustedHostListIsWildCard(IReadOnlyCollection<string> trustedHostList)
+        private static bool TrustedHostListIsWildCard(IEnumerable<string> trustedHostList)
         {
-            return trustedHostList.Count == 1 && trustedHostList.Single() == "*";
+            return trustedHostList.Count() == 1 && trustedHostList.Single() == "*";
         }
 
         private static List<PSObject> RunLocalCommand(Runspace runspace, Command arbitraryCommand)
